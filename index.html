@@ -3,7 +3,7 @@
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <title>FertiCalc — Cannabis (EC · pH · Costos · Sectores)</title>
+    <title>Dr. Cannabis -Fertilizer-IA- (EC · pH · Costos · Sectores)</title>
     <!-- Tailwind CSS (CDN) -->
     <script src="https://cdn.tailwindcss.com"></script>
     <!-- React 18 (UMD) -->
@@ -30,7 +30,7 @@
       })();
 
       /***********************************
-       * FertiCalc — Cannabis (V4.4 SIMPLE, 1 archivo)
+       * Dr. Cannabis -Fertilizer-IA- (V4.4 SIMPLE, 1 archivo)
        * Fix "Script error" + bug de N-NH₄ en parser de productos.
        * Cambios:
        *  - Orden y textos según pedidos anteriores (sin tocar Costos/Historial).
@@ -502,7 +502,7 @@
           perVolumeAll.forEach(r=> rowsCsv.push(toCSVRow([r.name, r.cont||'', (Number(r.grams)||0).toFixed(3), (Number(r.price_per_kg)||0).toFixed(2), (Number(r.cost)||0).toFixed(2)])))
           rowsCsv.push('')
           rowsCsv.push(toCSVRow(['TOTAL','','','',''+(Number(totalCost)||0).toFixed(2)]))
-          download(`ferticalc_detalle_${currentSector}_${nowISO}.csv`, rowsCsv.join('\n'), 'text/csv;charset=utf-8;')
+          download(`dr_cannabis_detalle_${currentSector}_${nowISO}.csv`, rowsCsv.join('\n'), 'text/csv;charset=utf-8;')
         }
         const exportHistoryCSV = ()=>{
           const nowISO = new Date().toISOString().replace(/[:\.]/g,'-')
@@ -520,11 +520,12 @@
             rowsCsv.push(toCSVRow(['Subtotal','','','','','','','','TOTAL','','','', (Number(rec?.totals?.cost)||0).toFixed(2)]))
             rowsCsv.push('')
           })
-          download(`ferticalc_historial_${currentSector}_${nowISO}.csv`, rowsCsv.join('\n'), 'text/csv;charset=utf-8;')
+          download(`dr_cannabis_historial_${currentSector}_${nowISO}.csv`, rowsCsv.join('\n'), 'text/csv;charset=utf-8;')
         }
         const openPrintWindow = (title, html)=>{ const w = window.open('', '_blank', 'noopener,noreferrer'); if(!w) return; w.document.write(`<!doctype html><html><head><meta charset="utf-8"/><title>${title}</title><style>body{font-family:system-ui,-apple-system,Segoe UI,Roboto,Arial; padding:16px; color:#0b2e23}h1{color:#059669}table{border-collapse:collapse; width:100%;}th,td{border:1px solid #cce3da; padding:6px 8px; font-size:12px}th{background:#e6f7f0; text-align:left}tfoot td{font-weight:700}</style></head><body>${html}<script>setTimeout(()=>window.print(),300)<\/script></body></html>`); w.document.close() }
-        const exportCurrentPDF = ()=>{ let html = `<h1>FertiCalc — Detalle actual</h1>`; html += `<div><b>Fecha:</b> ${new Date().toLocaleString()} · <b>Sector:</b> ${currentSector} · <b>Estado:</b> ${stageKey} · <b>Volumen:</b> ${volume} L</div>`; html += `<div><b>Agua:</b> EC ${fmt2(waterEC)} mS/cm · pH est. mezcla ${fmt2(ph_estimado)} · Escala TDS ${tdsScale}</div>`; html += `<table><thead><tr><th>Producto/Ácido</th><th>Cont.</th><th>g</th><th>$/kg</th><th>Costo</th></tr></thead><tbody>`; perVolumeAll.forEach(r=>{ html += `<tr><td>${r.name}</td><td>${r.cont||''}</td><td style="text-align:right">${(Number(r.grams)||0).toFixed(3)}</td><td style="text-align:right">${(Number(r.price_per_kg)||0).toFixed(2)}</td><td style="text-align:right">${(Number(r.cost)||0).toFixed(2)}</td></tr>` }) ; html += `</tbody><tfoot><tr><td colspan=\"4\" style=\"text-align:right\">TOTAL</td><td style=\"text-align:right\">$${(Number(totalCost)||0).toFixed(2)}</td></tr></tfoot></table>`; openPrintWindow('FertiCalc — Detalle actual', html) }
-        const exportHistoryPDF = ()=>{ const recs = records.filter(r=> r.sector===currentSector); const total = recs.reduce((a,r)=>a+(r?.totals?.cost||0),0); let html = `<h1>FertiCalc — Historial (${currentSector})</h1>`; html += `<div><b>Total período:</b> $${(Number(total)||0).toFixed(2)}</div>`; recs.forEach(rec=>{ html += `<h3 style="margin-top:14px">${rec.when} — ${rec.stage} — ${rec.volume} L — Ácidos: ${rec.acidEnabled? 'Sí':'No'}</h3>`; html += `<div>EC mix: ${fmt2(rec?.totals?.ec_mix_mScm||0)} mS/cm · EC total: ${fmt2(rec?.totals?.ec_total_mScm||0)} mS/cm · TDS(estimado): ${rec?.totals?.tds_ppm_mix||0} ppm · pH est.: ${fmt2(rec?.totals?.ph_estimado||0)}</div>`; html += `<table><thead><tr><th>Producto/Ácido</th><th>Cont.</th><th>g</th><th>$/kg</th><th>Costo</th></tr></thead><tbody>`; if (rec.items && rec.items.length){ rec.items.forEach(it=>{ html += `<tr><td>${it.name}</td><td>${it.cont}</td><td style=\"text-align:right\">${(Number(it.grams)||0).toFixed(3)}</td><td style=\"text-align:right\">${(Number(it.price_per_kg)||0).toFixed(2)}</td><td style=\"text-align:right\">${(Number(it.cost)||0).toFixed(2)}</td></tr>` }) } html += `</tbody><tfoot><tr><td colspan=\"4\" style=\"text-align:right\">TOTAL</td><td style=\"text-align:right\">$${(Number(rec?.totals?.cost)||0).toFixed(2)}</td></tr></tfoot></table>` }); openPrintWindow('FertiCalc — Historial', html) }
+
+        const exportCurrentPDF = ()=>{ let html = `<h1>Dr. Cannabis -Fertilizer-IA- — Detalle actual</h1>`; html += `<div><b>Fecha:</b> ${new Date().toLocaleString()} · <b>Sector:</b> ${currentSector} · <b>Estado:</b> ${stageKey} · <b>Volumen:</b> ${volume} L</div>`; html += `<div><b>Agua:</b> EC ${fmt2(waterEC)} mS/cm · pH est. mezcla ${fmt2(ph_estimado)} · Escala TDS ${tdsScale}</div>`; html += `<table><thead><tr><th>Producto/Ácido</th><th>Cont.</th><th>g</th><th>$/kg</th><th>Costo</th></tr></thead><tbody>`; perVolumeAll.forEach(r=>{ html += `<tr><td>${r.name}</td><td>${r.cont||''}</td><td style=\"text-align:right\">${(Number(r.grams)||0).toFixed(3)}</td><td style=\"text-align:right\">${(Number(r.price_per_kg)||0).toFixed(2)}</td><td style=\"text-align:right\">${(Number(r.cost)||0).toFixed(2)}</td></tr>` }) ; html += `</tbody><tfoot><tr><td colspan=\"4\" style=\"text-align:right\">TOTAL</td><td style=\"text-align:right\">$${(Number(totalCost)||0).toFixed(2)}</td></tr></tfoot></table>`; openPrintWindow('Dr. Cannabis -Fertilizer-IA- — Detalle actual', html) }
+        const exportHistoryPDF = ()=>{ const recs = records.filter(r=> r.sector===currentSector); const total = recs.reduce((a,r)=>a+(r?.totals?.cost||0),0); let html = `<h1>Dr. Cannabis -Fertilizer-IA- — Historial (${currentSector})</h1>`; html += `<div><b>Total período:</b> $${(Number(total)||0).toFixed(2)}</div>`; recs.forEach(rec=>{ html += `<h3 style=\"margin-top:14px\">${rec.when} — ${rec.stage} — ${rec.volume} L — Ácidos: ${rec.acidEnabled? 'Sí':'No'}</h3>`; html += `<div>EC mix: ${fmt2(rec?.totals?.ec_mix_mScm||0)} mS/cm · EC total: ${fmt2(rec?.totals?.ec_total_mScm||0)} mS/cm · TDS(estimado): ${rec?.totals?.tds_ppm_mix||0} ppm · pH est.: ${fmt2(rec?.totals?.ph_estimado||0)}</div>`; html += `<table><thead><tr><th>Producto/Ácido</th><th>Cont.</th><th>g</th><th>$/kg</th><th>Costo</th></tr></thead><tbody>`; if (rec.items && rec.items.length){ rec.items.forEach(it=>{ html += `<tr><td>${it.name}</td><td>${it.cont}</td><td style=\"text-align:right\">${(Number(it.grams)||0).toFixed(3)}</td><td style=\"text-align:right\">${(Number(it.price_per_kg)||0).toFixed(2)}</td><td style=\"text-align:right\">${(Number(it.cost)||0).toFixed(2)}</td></tr>` }) } html += `</tbody><tfoot><tr><td colspan=\"4\" style=\"text-align:right\">TOTAL</td><td style=\"text-align:right\">$${(Number(rec?.totals?.cost)||0).toFixed(2)}</td></tr></tfoot></table>` }); openPrintWindow('Dr. Cannabis -Fertilizer-IA- — Historial', html) }
 
         // Records filtrados por sector
         const recordsForSector = useMemo(()=> records.filter(r=> r.sector===currentSector), [records, currentSector])
@@ -537,10 +538,10 @@
             <div className="p-5 md:p-8 max-w-[1240px] mx-auto">
               <header className="mb-4">
                 <div className="flex items-center justify-center gap-3">
-                  <img src="./cannabis1.jpg" alt="logo" className="h-10 w-10 rounded-full object-cover border border-emerald-700/60"/>
-                  <h1 className="text-3xl sm:text-4xl font-extrabold tracking-tight text-emerald-300 text-center">FertiCalc — Cannabis</h1>
+                  <img src="./Logo3.png" alt="Dr. Cannabis -Fertilizer-IA- logo" className="h-10 w-10 rounded-full object-cover border border-emerald-700/60"/>
+                  <h1 className="text-3xl sm:text-4xl font-extrabold tracking-tight text-emerald-300 text-center">Dr. Cannabis -Fertilizer-IA-</h1>
                 </div>
-                <div className="text-center mt-1 text-emerald-200/90 text-sm">Calculadora Fertirriego Experto con PPM, EC, PH - Ácidos - Costos - Historial</div>
+                <div className="text-center mt-1 text-emerald-200/90 text-sm">Calculadora Dr. Cannabis de Fertirriego Experto con PPM, EC, pH - Ácidos - Costos - Historial</div>
               </header>
 
               {/* Tabs */}
@@ -664,7 +665,7 @@
                       <div className="text-xs mt-2 text-emerald-300/80">El ajuste de pH se calcula por <b>alcalinidad</b> (meq/L) → gramos de ácidos. Medí el pH final siempre.</div>
                     </div>
                     <div className="p-3 rounded-xl border border-emerald-800/50 bg-emerald-900/20 flex items-center justify-center">
-                      <img src="./cannabis.jpg" alt="cannabis" className="max-h-[280px] w-full object-contain"/>
+                      <img src="./Logo.png" alt="Ilustración de Dr. Cannabis -Fertilizer-IA-" className="max-h-[280px] w-full object-contain"/>
                     </div>
                   </div>
 
@@ -951,7 +952,7 @@
               {/* Footer con crédito + imagen */}
               <footer className="mt-6 py-4 text-center text-sm text-emerald-200/80 space-y-3">
                 <div>App desarrollada por <a className="underline text-emerald-300 hover:text-emerald-200" href="https://www.linkedin.com/in/walter-valdivieso/" target="_blank" rel="noreferrer">Walter Valdivieso</a></div>
-                <div className="flex justify-center"><img src="./cannabis 2.jpg" alt="cannabis" className="h-[150px] w-[141px] object-contain"/></div>
+                <div className="flex justify-center"><img src="./Logo4.png" alt="Logotipo Dr. Cannabis -Fertilizer-IA-" className="h-[150px] w-[141px] object-contain"/></div>
               </footer>
             </div>
           </div>
@@ -1019,7 +1020,7 @@
       // Ejecutar pruebas y mostrarlas en el panel
       const _tests = runTests();
       renderTests(_tests);
-      window.FertiCalcTests = _tests;
+      window.DrCannabisTests = _tests;
     </script>
   </body>
 </html>
