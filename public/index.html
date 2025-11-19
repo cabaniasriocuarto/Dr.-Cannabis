@@ -19,6 +19,21 @@
     <script type="text/babel" data-presets="env,react">
       const {useMemo,useState,useEffect} = React;
 
+      const inferApiBase = () => {
+        if (typeof window === 'undefined') return 'http://localhost:17850';
+        if (window.DR_CANNABIS_API_BASE) return window.DR_CANNABIS_API_BASE;
+        const origin = window.location?.origin;
+        if (origin && origin.startsWith('http')) return origin;
+        return 'http://localhost:17850';
+      };
+
+      const sanitizeBase = (base) => String(base || '').replace(/\/+$/, '');
+      const API_BASE = sanitizeBase(inferApiBase());
+      const API_ENDPOINTS = {
+        query: window.DR_CANNABIS_QUERY_URL || `${API_BASE}/api/dr-cannabis/query`,
+        health: window.DR_CANNABIS_HEALTH_URL || `${API_BASE}/api/dr-cannabis/health`,
+      };
+
       // Error overlay (ayuda a depurar "Script error")
       (function(){
         const style = 'position:fixed;z-index:99999;bottom:8px;left:8px;max-width:96vw;background:#111827;color:#fca5a5;border:1px solid #f87171;border-radius:8px;padding:8px 10px;font:12px/1.4 ui-sans-serif,system-ui';
@@ -81,6 +96,7 @@
       const clamp  = (x, a, b) => Math.max(a, Math.min(b, x));
       const fmt2   = (n) => (isFinite(n) ? n.toFixed(2) : '0.00');
       const pretty3= (n) => (isFinite(n) ? new Intl.NumberFormat('es-AR',{minimumFractionDigits:3,maximumFractionDigits:3}).format(n) : '0.000');
+      const roundVal = (n, digits=2) => Number((Number(n)||0).toFixed(digits));
 
       /*************** Productos iniciales (ejemplo) ***************/
       const initialProducts = [
@@ -308,9 +324,9 @@
 
       /*************** App ***************/
       
-// Componente flotante: Bot Dr. Cannabis (modo demo).
-// Se renderiza junto con <App /> y luego se conectará al motor IA offline.
-function DrCannabisBot({ currentStage }) {
+// Componente flotante: Bot Dr. Cannabis (conectado al backend local).
+// Se renderiza junto con <App /> y envía el contexto de la receta al motor IA offline.
+function DrCannabisBot({ botContext }) {
   const [isOpen, setIsOpen] = useState(false);
   const [input, setInput] = useState("");
   const [messages, setMessages] = useState([
@@ -318,13 +334,15 @@ function DrCannabisBot({ currentStage }) {
       id: 1,
       from: "bot",
       short:
-        "Hola, soy Dr. Cannabis. Decime si querés ayuda con nutrición (PPM/EC), riego, ambiente, plagas o cómo usar la app.",
+        "Hola, soy Dr. Cannabis. Puedo leer tus datos actuales de la app y devolver recomendaciones rápidas.",
       full:
-        "Hola, soy Dr. Cannabis, tu asistente agronómico especializado en cannabis y manual interactivo de la app Dr. Cannabis -Fertilizer-IA-. Puedo ayudarte con nutrición (PPM, EC y sales), riego, ambiente (indoor, invernadero, exterior), plagas y enfermedades, clonación, cosecha y también a entender cada pantalla de la app. Primero te doy una respuesta corta y, si querés, podés ampliar para ver una explicación más técnica y detallada.",
+        "Hola, soy Dr. Cannabis, tu asistente agronómico especializado en cannabis y manual interactivo de la app Dr. Cannabis -Fertilizer-IA-. Al consultarme, analizo el contexto de tu tanque (PPM, EC, etapa fenológica, sectores) y respondo primero con un resumen corto y luego con la explicación técnica completa, tal como indica el Prompt Maestro.",
       expanded: false,
       loading: false,
     },
   ]);
+  const [botStatus, setBotStatus] = useState({ ready: false, label: "Modo demo", model: null });
+  const [lastError, setLastError] = useState(null);
 
   const chatRef = React.useRef(null);
 
@@ -333,6 +351,40 @@ function DrCannabisBot({ currentStage }) {
       chatRef.current.scrollTop = chatRef.current.scrollHeight;
     }
   }, [messages, isOpen]);
+
+  useEffect(() => {
+    let cancelled = false;
+    async function checkHealth() {
+      try {
+        const res = await fetch(API_ENDPOINTS.health, { method: 'GET' });
+        if (!res.ok) throw new Error(`Status ${res.status}`);
+        const data = await res.json();
+        if (!cancelled) {
+          setBotStatus({
+            ready: true,
+            label: data?.model ? `IA online · ${data.model}` : 'IA online',
+            model: data?.model || null,
+          });
+        }
+      } catch (err) {
+        if (!cancelled) {
+          setBotStatus((prev) => ({ ...prev, ready: false, label: 'Modo demo' }));
+        }
+      }
+    }
+    checkHealth();
+    const intervalId = setInterval(checkHealth, 60000);
+    return () => {
+      cancelled = true;
+      clearInterval(intervalId);
+    };
+  }, []);
+
+  const stageLabel = botContext?.stage?.name || botContext?.stage?.key || 'No definida en la app';
+  const contextHint = botContext ? 'Contexto sincronizado con la app' : 'Esperando datos de la app';
+  const statusBadgeClass = botStatus.ready
+    ? 'bg-emerald-500/15 border-emerald-300/70 text-emerald-100'
+    : 'bg-amber-500/10 border-amber-400/60 text-amber-100';
 
   function togglePanel() {
     setIsOpen((v) => !v);
@@ -347,18 +399,36 @@ function DrCannabisBot({ currentStage }) {
   }
 
   async function askDrCannabis(userText) {
-    const stageText = currentStage ? " (etapa actual: " + currentStage + ")" : "";
+    const payloadContext = botContext && Object.keys(botContext).length
+      ? botContext
+      : { stage: { name: stageLabel || 'No definida' } };
 
-    const short =
-      "Respuesta corta DEMO: este es el contenedor visual del bot. En tu implementación real, acá se conecta el modelo IA offline con el Prompt Maestro.";
-    const full =
-      "Respuesta larga DEMO: ahora mismo Dr. Cannabis está en modo demostración, sin motor de IA conectado. En producción, esta función askDrCannabis() debe llamar a tu modelo local (por ejemplo, un servidor en Electron) pasando el Prompt Maestro, los datos de la app (etapa, sistema, PPM/EC objetivo) y la consulta del usuario" +
-      stageText +
-      ". El modelo debería responder primero en forma breve y luego, si el usuario lo pide, ampliar con detalles técnicos de nutrición, riego, ambiente, plagas y uso de la app.";
-
-    await new Promise((r) => setTimeout(r, 500));
-
-    return { short, full };
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), 60000);
+    try {
+      const response = await fetch(API_ENDPOINTS.query, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ message: userText, context: payloadContext }),
+        signal: controller.signal,
+      });
+      if (!response.ok) {
+        throw new Error(`Backend respondió ${response.status}`);
+      }
+      const data = await response.json();
+      if (!data?.short || !data?.full) {
+        throw new Error('Respuesta incompleta del backend');
+      }
+      setBotStatus((prev) => ({ ...prev, ready: true, label: prev.ready ? prev.label : 'IA online' }));
+      setLastError(null);
+      return data;
+    } catch (err) {
+      setBotStatus((prev) => ({ ...prev, ready: false, label: 'Modo demo' }));
+      setLastError(err?.message ? String(err.message) : 'Error desconocido');
+      throw err;
+    } finally {
+      clearTimeout(timeout);
+    }
   }
 
   async function handleSubmit(e) {
@@ -408,6 +478,7 @@ function DrCannabisBot({ currentStage }) {
       );
     } catch (err) {
       console.error(err);
+      const errMsg = err?.message ? String(err.message) : "Error desconocido";
       setMessages((prev) =>
         prev.map((m) =>
           m.id === loadingId
@@ -416,7 +487,11 @@ function DrCannabisBot({ currentStage }) {
                 loading: false,
                 short: "Hubo un problema al consultar al motor de IA.",
                 full:
-                  "Hubo un problema al consultar al motor de IA. Revisá que tu backend local de Dr. Cannabis esté corriendo y que la función askDrCannabis() esté apuntando a la ruta correcta.",
+                  "Hubo un problema al consultar al motor de IA (" +
+                  errMsg +
+                  "). Revisá que tu backend local de Dr. Cannabis esté corriendo en " +
+                  API_ENDPOINTS.query +
+                  " y que no haya bloqueos de red ni CORS.",
               }
             : m
         )
@@ -476,15 +551,26 @@ function DrCannabisBot({ currentStage }) {
 
           <div className="px-4 pt-2 pb-1 border-b border-emerald-500/20 bg-slate-900/60 text-[11px] text-emerald-200 flex items-center justify-between gap-2">
             <div className="flex-1 truncate">
-              <span className="font-semibold">Etapa actual: </span>
-              <span className="font-mono">
-                {currentStage || "No definida en la app"}
-              </span>
+              <div>
+                <span className="font-semibold">Etapa actual: </span>
+                <span className="font-mono">{stageLabel}</span>
+              </div>
+              <div className="text-[10px] text-emerald-300/80">{contextHint}</div>
             </div>
-            <span className="px-2 py-0.5 rounded-full bg-emerald-500/15 border border-emerald-400/50 text-[10px] uppercase tracking-wide">
-              Modo demo
+            <span
+              className={
+                "px-2 py-0.5 rounded-full border text-[10px] uppercase tracking-wide " +
+                statusBadgeClass
+              }
+            >
+              {botStatus.label}
             </span>
           </div>
+          {lastError && (
+            <div className="px-4 py-2 border-b border-amber-500/30 bg-amber-500/5 text-[11px] text-amber-200">
+              Último error: {lastError}
+            </div>
+          )}
 
           <div
             ref={chatRef}
@@ -583,7 +669,7 @@ function DrCannabisBot({ currentStage }) {
 }
 
 
-function App(){
+function App({ onBotContextChange }){
         const [rows, setRows] = useState(initialProducts)
         const [stageKey, setStageKey] = useState('Valores ppm Clonación')
         const [tolPct, setTolPct] = useState(12)
@@ -743,6 +829,62 @@ function App(){
         const addRow = () => setRows(p=>[...p,{ name:'Nuevo', dose_g_per_L:0, price_per_kg:0 }])
         const delRow = (i) => setRows(p=>p.filter((_,j)=>j!==i))
         const onChange = (i, key, value) => { setRows(prev=> prev.map((r,idx)=> idx===i ? {...r, [key]: key==='name'? value : (value===''? 0 : Number(value)) } : r )) }
+
+        const botContext = useMemo(()=>{
+          const totals = {}
+          Object.entries(sum||{}).forEach(([k,v])=>{ totals[k] = roundVal(v) })
+          const derivedTotals = {}
+          Object.entries(derived||{}).forEach(([k,v])=>{ derivedTotals[k] = roundVal(v) })
+          const targetPpm = {}
+          Object.entries(targetForSolve||{}).forEach(([k,v])=>{ targetPpm[k] = roundVal(v) })
+          const recipe = rows.map((r, idx)=>{
+            const composition = {}
+            Object.keys(r||{}).forEach((key)=>{ if (key && key.startsWith('pct_')) composition[key] = Number(r[key]||0) })
+            return {
+              name: r.name,
+              dose_g_per_L: roundVal(r.dose_g_per_L, 3),
+              price_per_kg: roundVal(r.price_per_kg, 2),
+              container: containers[idx] || null,
+              composition,
+            }
+          })
+          const acidInfo = acidEnabled ? {
+            enabled: true,
+            gramsPer1000L: Object.fromEntries(Object.entries(acidGramsPer1000L||{}).map(([k,v])=>[k, roundVal(v,3)])),
+            mixPct: { ...acidMixPct },
+            alkalinity_meqL: roundVal(alkalinity_meqL,3),
+            target_meqL: roundVal(alkTarget_meqL,3),
+            target_pH: Number(targetPH),
+          } : { enabled: false }
+          return {
+            generatedAt: new Date().toISOString(),
+            stage: { key: stageKey, name: stageName },
+            sector: currentSector,
+            tolerance_pct: Number(tolPct),
+            volume_L: Number(volume),
+            warnings: Array.isArray(warns) ? [...warns] : [],
+            mix: {
+              volume_L: Number(volume),
+              tds_mix_ppm: roundVal(tds_ppm_mix,0),
+              ec_total_mScm: roundVal(ec_total,2),
+              ec_from_mix_mScm: roundVal(ec_from_mix,2),
+              ph_estimado: roundVal(ph_estimado,2),
+              water_EC_mScm: Number(waterEC),
+              water_pH: Number(waterPH),
+              target_pH: Number(targetPH),
+              tds_scale: Number(tdsScale),
+            },
+            totals_ppm: totals,
+            derived_ppm: derivedTotals,
+            target_ppm: targetPpm,
+            stage_defaults_ppm: stageDefaults ? { ...stageDefaults } : {},
+            custom_targets_ppm: { ...customTargets },
+            recipe,
+            acids: acidInfo,
+          }
+        }, [sum, derived, targetForSolve, rows, containers, acidEnabled, acidGramsPer1000L, acidMixPct, alkalinity_meqL, alkTarget_meqL, targetPH, stageKey, stageName, currentSector, tolPct, volume, warns, tds_ppm_mix, ec_total, ec_from_mix, ph_estimado, waterEC, waterPH, tdsScale, stageDefaults, customTargets])
+
+        useEffect(()=>{ onBotContextChange?.(botContext) }, [botContext, onBotContextChange])
 
         // Persistencia de registros (localStorage)
         const [records, setRecords] = useState([])
@@ -1288,9 +1430,19 @@ function App(){
           list.map(t=> `<li>${t.ok? '✅' : '❌'} ${t.name}</li>`).join('') + '</ul>'
       }
 
+      function RootApp(){
+        const [botContext, setBotContext] = useState(null)
+        return (
+          <>
+            <App onBotContextChange={setBotContext} />
+            <DrCannabisBot botContext={botContext} />
+          </>
+        )
+      }
+
       // Mount app
       const root = ReactDOM.createRoot(document.getElementById('root'))
-      try { root.render(<><App /><DrCannabisBot /></>) } catch (e) { console.error(e); }
+      try { root.render(<RootApp />) } catch (e) { console.error(e); }
 
       // Ejecutar pruebas y mostrarlas en el panel
       const _tests = runTests();
