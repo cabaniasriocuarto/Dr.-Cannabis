@@ -1,0 +1,131 @@
+﻿  async function askDrCannabis(userText) {
+    // Preparar contexto de la aplicación
+    const appContext = {
+      etapaActual: currentStage || 'No definida',
+      volumenL: volume,
+      toleranciaPct: tolPct,
+      acidosActivados: acidEnabled,
+      aguaEC: waterEC,
+      aguaPH: waterPH,
+      phObjetivo: targetPH,
+      escalasTDS: tdsScale,
+      // PPM actuales principales
+      ppmActuales: {
+        N_total: derived?.N_total?.toFixed(1) || '0',
+        N_NO3: sum?.N_NO3?.toFixed(1) || '0', 
+        N_NH4: sum?.N_NH4?.toFixed(1) || '0',
+        P_H2PO4: sum?.H2PO4?.toFixed(1) || '0',
+        K_K2O: sum?.K2O?.toFixed(1) || '0',
+        Ca: sum?.Ca?.toFixed(1) || '0',
+        Mg: sum?.Mg?.toFixed(1) || '0',
+        SO4: sum?.SO4?.toFixed(1) || '0'
+      },
+      // EC estimada
+      ecTotal: ec_total?.toFixed(2) || '0',
+      ecMezcla: ec_from_mix?.toFixed(2) || '0',
+      tdsPPM: Math.round(tds_ppm_mix) || 0,
+      // Objetivos de la etapa
+      objetivosEtapa: stageDefaults || {}
+    };
+
+    // Prompt Maestro completo
+    const systemPrompt = `Eres **Dr. Cannabis**, un asistente agronómico especializado en cultivo de cannabis. Operas offline dentro de una aplicación de fertilización.
+
+**TU ROL**: Asesorar técnicamente sobre nutrición, riego, ambiente, plagas, clonación, cosecha y uso de la app.
+
+**CONTEXTO ACTUAL DE LA APP**:
+- Etapa fenológica: ${appContext.etapaActual}
+- Volumen de riego: ${appContext.volumenL} L
+- PPM actuales: N total ${appContext.ppmActuales.N_total} (NO3⁻ ${appContext.ppmActuales.N_NO3}, NH4⁺ ${appContext.ppmActuales.N_NH4}), P-H2PO4 ${appContext.ppmActuales.P_H2PO4}, K-K2O ${appContext.ppmActuales.K_K2O}, Ca ${appContext.ppmActuales.Ca}, Mg ${appContext.ppmActuales.Mg}, SO4 ${appContext.ppmActuales.SO4}
+- EC total: ${appContext.ecTotal} mS/cm (mezcla: ${appContext.ecMezcla}, agua: ${appContext.aguaEC})
+- TDS estimado: ${appContext.tdsPPM} ppm (escala ${appContext.escalasTDS})
+- pH agua origen: ${appContext.aguaPH}, pH objetivo: ${appContext.phObjetivo}
+- Ácidos: ${appContext.acidosActivados ? 'Activados' : 'Desactivados'}
+
+**CONOCIMIENTOS**:
+1. **Nutrición y Fertilización**: Dominas PPM, EC, formulación con sales (nitrato de calcio, MKP, sulfato de potasio, etc.), ajustes por fase fenológica, diagnóstico de carencias/excesos.
+2. **Riego**: Frecuencia y volumen por sistema (tierra, coco, hidro) y etapa.
+3. **Ambiente**: Indoor (iluminación LED/HPS, temperatura 24-28°C día/18-22°C noche, humedad 60-70% vege/~50% flora, ventilación), invernadero, exterior.
+4. **Técnicas**: SCROG, SOG, LST, poda apical, defoliación.
+5. **Clonación**: Procedimiento completo (corte 45°, hormona enraizamiento, propagador con 80-95% HR, 22-26°C, luz suave).
+6. **Cosecha**: Indicadores de madurez (tricomas lechosos/ámbar), flush 1-2 semanas antes, secado 7-14 días a 18-22°C/50% HR, curado en frascos con burping.
+7. **Plagas y Enfermedades**: Prevención, IPM, controles biológicos (depredadores, neem, jabón potásico), sin marcas comerciales.
+8. **Integración con datos**: Usas los valores actuales de la app para dar recomendaciones personalizadas y viables con las sales disponibles.
+
+**ESTILO DE RESPUESTA**:
+- **Primera respuesta (corta)**: 2-4 líneas directas respondiendo la consulta principal.
+- **Segunda respuesta (ampliada)**: 1-2 párrafos con explicación técnica detallada, fundamentos, pasos a seguir, consideraciones.
+- Profesional, didáctico, claro, paso a paso.
+- Usa datos de la app cuando sea relevante.
+- NO prometas soluciones mágicas, sé realista.
+- NO uses nombres de marca comercial, solo genéricos.
+- Unidades métricas (L, °C, mS/cm, ppm).
+
+**IMPORTANTE**: Estructura tu respuesta SIEMPRE así:
+CORTA: [respuesta breve 2-4 líneas]
+|||
+AMPLIADA: [explicación técnica detallada]`;
+
+    try {
+      const response = await fetch("https://api.anthropic.com/v1/messages", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          model: "claude-sonnet-4-20250514",
+          max_tokens: 1000,
+          system: systemPrompt,
+          messages: [
+            { 
+              role: "user", 
+              content: userText + "\n\n[Recuerda: responde en formato CORTA: ... ||| AMPLIADA: ...]"
+            }
+          ],
+        })
+      });
+
+      const data = await response.json();
+      
+      // Extraer texto de la respuesta
+      let fullText = '';
+      if (data.content && Array.isArray(data.content)) {
+        fullText = data.content
+          .filter(block => block.type === 'text')
+          .map(block => block.text)
+          .join('\n');
+      }
+
+      // Parsear respuesta corta y ampliada
+      let short = '';
+      let full = '';
+      
+      if (fullText.includes('|||')) {
+        const parts = fullText.split('|||');
+        short = parts[0].replace(/CORTA:\s*/i, '').trim();
+        full = parts[1].replace(/AMPLIADA:\s*/i, '').trim();
+      } else {
+        // Si no está en el formato esperado, usar toda la respuesta
+        const lines = fullText.split('\n').filter(l => l.trim());
+        if (lines.length > 0) {
+          short = lines[0];
+          full = fullText;
+        } else {
+          short = fullText.substring(0, 200) + '...';
+          full = fullText;
+        }
+      }
+
+      return { 
+        short: short || 'Procesando tu consulta...', 
+        full: full || fullText 
+      };
+
+    } catch (error) {
+      console.error('Error al consultar Dr. Cannabis:', error);
+      return {
+        short: 'Hubo un problema al procesar tu consulta. Por favor, intenta nuevamente.',
+        full: 'Error técnico: ' + (error.message || 'No se pudo conectar con el motor de asesoramiento agronómico. Verifica tu conexión y vuelve a intentar.')
+      };
+    }
+  }
