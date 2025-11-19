@@ -5,11 +5,10 @@
 // - Espera que el modelo local devuelva { short, full } o, si devuelve texto plano,
 //   genera un short automático y usa el texto completo como full.
 
-import express from "express";
-import cors from "cors";
+import http from "http";
 import fs from "fs";
 import path from "path";
-import { fileURLToPath } from "url";
+import { fileURLToPath, URL as NodeURL } from "url";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -18,12 +17,13 @@ const __dirname = path.dirname(__filename);
 // Configuración básica
 // ------------------------
 
-const PORT = process.env.DR_CANNABIS_PORT || 17850;
+const PORT = Number(process.env.DR_CANNABIS_PORT || 17850);
 
 // URL del modelo LLM local (por ejemplo, Ollama u otro servidor offline)
 // Ejemplo para Ollama:  http://localhost:11434/api/chat
 const LLM_URL = process.env.DR_CANNABIS_LLM_URL || "http://localhost:11434/api/chat";
 const LLM_MODEL = process.env.DR_CANNABIS_MODEL || "llama3.1";
+const LLM_TIMEOUT_MS = Number(process.env.DR_CANNABIS_LLM_TIMEOUT || 60000);
 
 // Ruta al Prompt Maestro en un archivo .md
 // (Copiá todo tu prompt de Dr. Cannabis en este archivo)
@@ -37,9 +37,11 @@ try {
   console.error("[DrCannabis] No se pudo leer dr-cannabis-prompt.md. Asegúrate de crearlo.");
 }
 
-const app = express();
-app.use(cors());
-app.use(express.json({ limit: "2mb" }));
+function applyCors(res) {
+  res.setHeader("Access-Control-Allow-Origin", "*");
+  res.setHeader("Access-Control-Allow-Methods", "GET,POST,OPTIONS");
+  res.setHeader("Access-Control-Allow-Headers", "Content-Type");
+}
 
 // ------------------------
 // Función auxiliar: armar prompt para el LLM
@@ -100,21 +102,41 @@ async function callLocalLLM(systemPrompt, userMessageObj) {
     stream: false
   };
 
-  const res = await fetch(LLM_URL, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify(body)
-  });
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), LLM_TIMEOUT_MS);
+
+  let res;
+  try {
+    res = await fetch(LLM_URL, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(body),
+      signal: controller.signal
+    });
+  } finally {
+    clearTimeout(timeout);
+  }
 
   if (!res.ok) {
     throw new Error(`LLM respondio con status ${res.status}`);
   }
 
-  const data = await res.json();
+  const raw = await res.text();
+  let data;
+  try {
+    data = raw ? JSON.parse(raw) : {};
+  } catch (err) {
+    console.warn("[DrCannabis] Respuesta LLM no es JSON, usando texto plano");
+    return raw;
+  }
 
   // Formato típico de Ollama: { message: { role: 'assistant', content: '...' }, ... }
-  const content = data?.message?.content || "";
-  return content;
+  const content = data?.message?.content;
+  if (typeof content === "string") {
+    return content;
+  }
+
+  return raw;
 }
 
 // ------------------------
@@ -162,47 +184,94 @@ function extractJsonAnswer(rawText) {
 // Endpoint principal del bot
 // ------------------------
 
-app.post("/api/dr-cannabis/query", async (req, res) => {
-  try {
-    const { message, context } = req.body || {};
+function sendJson(res, status, payload) {
+  const body = JSON.stringify(payload);
+  res.writeHead(status, {
+    "Content-Type": "application/json; charset=utf-8",
+    "Content-Length": Buffer.byteLength(body)
+  });
+  res.end(body);
+}
 
-    if (!message || typeof message !== "string") {
-      return res.status(400).json({ error: "Falta 'message' en el cuerpo del request" });
-    }
-
-    const systemPrompt = buildSystemPrompt();
-    const userPromptObj = buildUserPrompt(message, context);
-
-    const rawText = await callLocalLLM(systemPrompt, userPromptObj);
-
-    let answer = extractJsonAnswer(rawText);
-
-    // Si el modelo no respetó el formato JSON, construimos uno básico
-    if (!answer) {
-      const text = (rawText || "Respuesta generada por Dr. Cannabis.").trim();
-      const short = text.length > 320 ? text.slice(0, 320) + "..." : text;
-      answer = {
-        short,
-        full: text
-      };
-    }
-
-    return res.json(answer);
-  } catch (err) {
-    console.error("[DrCannabis] Error en /api/dr-cannabis/query:", err);
-    return res.status(500).json({
-      error: "Error interno en Dr. Cannabis backend",
-      details: String(err.message || err)
+async function readJsonBody(req) {
+  return new Promise((resolve, reject) => {
+    let body = "";
+    req.on("data", chunk => {
+      body += chunk;
+      if (body.length > 2 * 1024 * 1024) {
+        reject(new Error("Payload demasiado grande"));
+        req.destroy();
+      }
     });
+    req.on("end", () => {
+      if (!body) {
+        resolve({});
+        return;
+      }
+      try {
+        resolve(JSON.parse(body));
+      } catch (err) {
+        reject(new Error("JSON inválido en el cuerpo de la petición"));
+      }
+    });
+    req.on("error", reject);
+  });
+}
+
+function buildHealthPayload() {
+  return { status: "ok", model: LLM_MODEL, llmUrl: LLM_URL };
+}
+
+const server = http.createServer(async (req, res) => {
+  applyCors(res);
+
+  if (req.method === "OPTIONS") {
+    res.writeHead(204);
+    res.end();
+    return;
   }
+
+  const requestUrl = new NodeURL(req.url || "/", `http://${req.headers.host || "localhost"}`);
+
+  if (req.method === "GET" && requestUrl.pathname === "/api/dr-cannabis/health") {
+    return sendJson(res, 200, buildHealthPayload());
+  }
+
+  if (req.method === "POST" && requestUrl.pathname === "/api/dr-cannabis/query") {
+    try {
+      const { message, context } = await readJsonBody(req);
+
+      if (!message || typeof message !== "string") {
+        return sendJson(res, 400, { error: "Falta 'message' en el cuerpo del request" });
+      }
+
+      const systemPrompt = buildSystemPrompt();
+      const userPromptObj = buildUserPrompt(message, context);
+
+      const rawText = await callLocalLLM(systemPrompt, userPromptObj);
+      let answer = extractJsonAnswer(rawText);
+
+      if (!answer) {
+        const text = (rawText || "Respuesta generada por Dr. Cannabis.").trim();
+        const short = text.length > 320 ? text.slice(0, 320) + "..." : text;
+        answer = { short, full: text };
+      }
+
+      return sendJson(res, 200, answer);
+    } catch (err) {
+      console.error("[DrCannabis] Error en /api/dr-cannabis/query:", err);
+      return sendJson(res, 500, {
+        error: "Error interno en Dr. Cannabis backend",
+        details: String(err.message || err)
+      });
+    }
+  }
+
+  res.writeHead(404, { "Content-Type": "application/json; charset=utf-8" });
+  res.end(JSON.stringify({ error: "Ruta no encontrada" }));
 });
 
-// Endpoint simple de healthcheck
-app.get("/api/dr-cannabis/health", (req, res) => {
-  res.json({ status: "ok", model: LLM_MODEL, llmUrl: LLM_URL });
-});
-
-app.listen(PORT, () => {
+server.listen(PORT, () => {
   console.log(`🚀 Dr. Cannabis backend escuchando en http://localhost:${PORT}`);
   console.log(`   Usando modelo local: ${LLM_MODEL} en ${LLM_URL}`);
 });

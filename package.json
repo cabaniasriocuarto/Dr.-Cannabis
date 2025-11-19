@@ -1,0 +1,14 @@
+{
+  "name": "dr-cannabis",
+  "version": "1.0.0",
+  "description": "Backend y frontend estático para Dr. Cannabis -Fertilizer-IA-",
+  "type": "module",
+  "scripts": {
+    "start": "node backend/dr-cannabis-backend.js"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "MIT",
+  "dependencies": {
+  }
+}
