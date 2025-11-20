@@ -4,20 +4,38 @@
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <title>Dr. Cannabis -Fertilizer-IA- · Calculadora de fertilización para Cannabis</title>
+    <script>
+      // Mensaje de error temprano si algún CDN falla (evita pantalla verde vacía)
+      function renderCriticalError(msg){
+        const root = document.getElementById('root') || document.body;
+        if(!root) return;
+        const box = document.createElement('div');
+        box.style.cssText = 'margin:24px; padding:18px; border-radius:12px; background:#052e29; color:#f8fafc; font-family:system-ui,-apple-system,Segoe UI,Roboto,Arial; box-shadow:0 8px 24px rgba(0,0,0,0.35); max-width:720px;';
+        box.innerHTML = `<h1 style="font-size:18px; margin-bottom:8px;">No se pudo iniciar Dr. Cannabis</h1><p style="font-size:14px; line-height:1.5;">${msg}</p><p style="font-size:12px; opacity:0.8;">Intentá recargar la página o asegurate de tener conexión para descargar los recursos base (React, Babel y Tailwind). Si el problema persiste, volvé a empaquetar el APK con los assets locales.</p>`;
+        root.innerHTML = '';
+        root.appendChild(box);
+      }
+    </script>
     <!-- Tailwind CSS (CDN) -->
-    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdn.tailwindcss.com" onerror="renderCriticalError('No se pudo cargar Tailwind CSS desde el CDN.')"></script>
     <!-- React 18 (UMD) -->
-    <script crossorigin="anonymous" src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
-    <script crossorigin="anonymous" src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
+    <script crossorigin="anonymous" src="https://unpkg.com/react@18/umd/react.production.min.js" onerror="renderCriticalError('No se pudo cargar React (modo offline).')"></script>
+    <script crossorigin="anonymous" src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js" onerror="renderCriticalError('No se pudo cargar ReactDOM (modo offline).')"></script>
     <!-- Babel (para permitir JSX inline) -->
-    <script crossorigin="anonymous" src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+    <script crossorigin="anonymous" src="https://unpkg.com/@babel/standalone/babel.min.js" onerror="renderCriticalError('No se pudo iniciar Babel para renderizar la app. Verificá la conexión o empaquetá los recursos localmente.')"></script>
     <style>html, body, #root{height:100%}</style>
   </head>
   <body class="bg-emerald-950 text-emerald-100">
     <div id="root"></div>
 
     <script type="text/babel" data-presets="env,react">
-      const {useMemo,useState,useEffect} = React;
+      const ReactGlobal = window.React;
+      const ReactDOMGlobal = window.ReactDOM;
+      if(!ReactGlobal || !ReactDOMGlobal){
+        renderCriticalError('Faltan dependencias base (React/ReactDOM). Bajá una copia local de los scripts CDN para que la app funcione sin conexión.');
+        return;
+      }
+      const {useMemo,useState,useEffect} = ReactGlobal;
 
       // Error overlay (ayuda a depurar "Script error")
       (function(){
@@ -328,9 +346,9 @@ function DrCannabisBot({ botContext }) {
       loading: false,
     },
   ]);
-C  const [botStatus, setBotStatus] = useState({ ready: true, label: "IA local lista", model: "Offline" });
+  const [botStatus, setBotStatus] = useState({ ready: true, label: "IA local lista", model: "Offline" });
 
-  const chatRef = React.useRef(null);
+  const chatRef = ReactGlobal.useRef(null);
 
   useEffect(() => {
     if (chatRef.current) {
@@ -1444,7 +1462,7 @@ function App({ onBotContextChange }){
       }
 
       // Mount app
-      const root = ReactDOM.createRoot(document.getElementById('root'))
+      const root = ReactDOMGlobal.createRoot(document.getElementById('root'))
       try { root.render(<RootApp />) } catch (e) { console.error(e); }
 
       // Ejecutar pruebas y mostrarlas en el panel
