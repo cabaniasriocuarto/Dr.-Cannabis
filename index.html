@@ -426,14 +426,14 @@ function DrCannabisBot({ botContext }) {
   // Funciones para endpoints (simplificadas para modo offline definitivo)
   const loadApiEndpoints = () => {
     return {
-      base: 'http://localhost:17850',
-      query: 'http://localhost:17850/query',
-      health: 'http://localhost:17850/health'
+      base: 'http://localhost:17850/api/dr-cannabis',
+      query: 'http://localhost:17850/api/dr-cannabis/query',
+      health: 'http://localhost:17850/api/dr-cannabis/health'
     };
   };
 
   const buildApiEndpoints = (conf) => {
-    const base = conf?.base || 'http://localhost:17850';
+    const base = conf?.base || 'http://localhost:17850/api/dr-cannabis';
     return {
       base,
       query: conf?.query || base + '/query',
@@ -462,121 +462,218 @@ function DrCannabisBot({ botContext }) {
     const ecValue = context?.mix?.ec_total_mScm;
     const ppmValue = context?.mix?.tds_mix_ppm;
     const sector = context?.sector || 'General';
-    
+
     // Análisis de la formulación actual
     const analysis = analyzeCurrentFormulation(context);
-    
+
     // Respuestas basadas en palabras clave y contexto
     const lowerText = userText.toLowerCase();
-    
+
+    const isLightingQuestion =
+      lowerText.includes('luz') ||
+      lowerText.includes('ilumin') ||
+      lowerText.includes('w/m2') ||
+      lowerText.includes('w m2') ||
+      lowerText.includes('watt') ||
+      lowerText.includes('ppfd');
+
+    const isHowAppWorks =
+      lowerText.includes('cómo funciona') ||
+      lowerText.includes('como funciona') ||
+      lowerText.includes('usar la app') ||
+      lowerText.includes('como usar') ||
+      lowerText.includes('qué hace la app') ||
+      lowerText.includes('que hace la app');
+
+    if (isHowAppWorks || lowerText.includes('dr. cannabis') || lowerText.includes('bot')) {
+      return {
+        short: 'ℹ️ Cómo usar la app y el bot',
+        full: `Así funciona Dr. Cannabis Fertilizer-IA:
+
+1) Cargá tus productos y porcentajes.
+2) Elegí la etapa fenológica y los objetivos PPM.
+3) Tildá si querés incluir ácidos y ajustá el pH.
+4) Presioná "Calcular Dosis de Fertilizante" (botones debajo de Objetivos o Ácidos).
+5) Revisá el resultado, costo y compatibilidad (contenedores A/B/C).
+
+El bot toma el contexto de etapa, PPM y EC para darte recomendaciones agronómicas o responder dudas generales del cultivo.`
+      };
+    }
+
+    if (isLightingQuestion) {
+      return {
+        short: '💡 Iluminación indoor y densidad de potencia',
+        full: `Para iluminación indoor: 
+
+• Vegetativo: 250-350 µmol/m²/s (≈25-35 W LED/m²).
+• Floración: 700-900 µmol/m²/s (≈40-55 W LED/m² de buena eficiencia).
+• Distribución pareja: evitar puntos calientes.
+• Altura típica: 40-60 cm en vege, 30-45 cm en flora (ajustar por PPFD real).
+• Fotoperiodo: 18/6 en vege, 12/12 en flora.
+
+Si usás sodio/HPS: 600 W cubre ~1-1.2 m²; LED modernos rinden más por watt.`
+      };
+    }
+
     if (lowerText.includes('ppm') || lowerText.includes('ec') || lowerText.includes('formulación')) {
       return {
         short: `📊 Análisis de formulación - EC: ${ecValue || '?'} mS/cm - PPM: ${ppmValue || '?'}`,
-        full: `Analizando tu formulación para ${stageName} en sector ${sector}:\n\n${analysis}\n\nRecomendación: ${getFormulationAdvice(context)}`
+        full: `Analizando tu formulación para ${stageName} en sector ${sector}:
+
+${analysis}
+
+Recomendación: ${getFormulationAdvice(context)}`
       };
     }
-    
+
     if (lowerText.includes('vegetativo') || lowerText.includes('vege')) {
       return {
         short: "🌱 Fase Vegetativa - Alto N, crecimiento vigoroso",
-        full: `En fase VEGETATIVA para ${stageName}:\n\n• Nitrógeno (N): 175-200 ppm\n• Fósforo (P): 70-90 ppm  \n• Potasio (K): 160-180 ppm\n• Calcio: 125 ppm\n• Magnesio: 80 ppm\n\nEC objetivo: 1.2-1.8 mS/cm\nFotoperiodo: 18/6\nTemperatura: 24-28°C día, 18-22°C noche\nHumedad: 60-70%`
+        full: `En fase VEGETATIVA para ${stageName}:
+
+• Nitrógeno (N): 175-200 ppm
+• Fósforo (P): 70-90 ppm  
+• Potasio (K): 160-180 ppm
+• Calcio: 125 ppm
+• Magnesio: 80 ppm
+
+EC objetivo: 1.2-1.8 mS/cm
+Fotoperiodo: 18/6
+Temperatura: 24-28°C día,18-22°C noche
+Humedad: 60-70%`
       };
     }
-    
+
     if (lowerText.includes('floración') || lowerText.includes('flora')) {
       return {
         short: "🌸 Fase Floración - Alto P/K, reducir N",
-        full: `En FASE DE FLORACIÓN para ${stageName}:\n\n• Nitrógeno (N): 125-160 ppm (reducir)\n• Fósforo (P): 90-120 ppm (aumentar)\n• Potasio (K): 200-250 ppm (aumentar)\n• Calcio: 125 ppm\n• Magnesio: 80 ppm\n\nEC objetivo: 1.8-2.4 mS/cm\nFotoperiodo: 12/12\nTemperatura: 22-26°C día, 18-21°C noche\nHumedad: 45-55% (prevenir hongos)`
+        full: `En FASE DE FLORACIÓN para ${stageName}:
+
+• Nitrógeno (N): 125-160 ppm (reducir)
+• Fósforo (P): 90-120 ppm (aumentar)
+• Potasio (K): 200-250 ppm (aumentar)
+• Calcio: 125 ppm
+• Magnesio: 80 ppm
+
+EC objetivo: 1.8-2.4 mS/cm
+Fotoperiodo: 12/12
+Temperatura: 22-26°C día, 18-21°C noche
+Humedad: 45-55% (prevenir hongos)`
       };
     }
-    
+
     if (lowerText.includes('amarill') || lowerText.includes('hojas amarillas')) {
       return {
         short: "🟡 Hojas amarillas - Posible deficiencia de Nitrógeno",
-        full: `DIAGNÓSTICO HOJAS AMARILLAS:\n\n• Amarillamiento en hojas BASALES: Deficiencia de Nitrógeno\n• Amarillamiento entre venas: Deficiencia de Magnesio\n• Amarillamiento general: Exceso de riego/pH\n\nSOLUCIÓN:\n1. Verificar pH (6.0-6.5 suelo, 5.8-6.2 coco/hidro)\n2. Ajustar formulación de Nitrógeno\n3. Revisar frecuencia de riego\n4. Chequear temperatura raíces (18-24°C)`
+        full: `DIAGNÓSTICO HOJAS AMARILLAS:
+
+• Amarillamiento en hojas BASALES: Deficiencia de Nitrógeno
+• Amarillamiento entre venas: Deficiencia de Magnesio
+• Amarillamiento general: Exceso de riego/pH
+
+SOLUCIÓN:
+1. Verificar pH (6.0-6.5 suelo, 5.8-6.2 coco/hidro)
+2. Ajustar formulación de Nitrógeno
+3. Revisar frecuencia de riego
+4. Chequear temperatura raíces (18-24°C)`
       };
     }
-    
+
     if (lowerText.includes('flush') || lowerText.includes('lavado')) {
       return {
         short: "💧 Flush - Lavado de raíces 1-2 semanas antes cosecha",
-        full: `FLUSH (Lavado de raíces):\n\n• Iniciar 10-14 días antes de cosecha\n• Regar solo con agua pH equilibrado\n• Objetivo: Eliminar excesos de nutrientes\n• Mejora sabor y suavidad del producto final\n• En suelo orgánico: 7 días suficiente\n• En hidroponía/coco: 10-14 días necesarios\n\nSíntomas de ready: hojas amarilleando naturalmente`
+        full: `FLUSH (Lavado de raíces):
+
+• Iniciar 10-14 días antes de cosecha
+• Regar solo con agua pH equilibrado
+• Objetivo: Eliminar excesos de nutrientes
+• Mejora sabor y suavidad del producto final
+• En suelo orgánico: 7 días suficiente
+• En hidroponía/coco: 10-14 días necesarios
+
+Síntomas de ready: hojas amarilleando naturalmente`
       };
     }
-    
+
     if (lowerText.includes('ph') || lowerText.includes('acidez')) {
       return {
         short: "📈 pH - Rango ideal 5.8-6.2 (coco/hidro), 6.0-6.5 (suelo)",
-        full: `MANEJO DE pH:\n\n• Coco/Hidroponía: 5.8-6.2\n• Suelo/Tierra: 6.0-6.5\n• Medir y ajustar DIARIAMENTE en hidro\n• En suelo, chequear cada 2-3 riegos\n\nEFECTO DE pH INCORRECTO:\n• Bloqueo de nutrientes\n• Carencias aunque nutrientes presentes\n• Acumulación de sales\n\nUSO DE ÁCIDOS:\n• Fosfórico: aporta P, buen buffer\n• Nítrico: aporta N, efecto rápido\n• Cítrico: orgánico, menos estable`
+        full: `MANEJO DE pH:
+
+• Coco/Hidroponía: 5.8-6.2
+• Suelo/Tierra: 6.0-6.5
+• Medir y ajustar DIARIAMENTE en hidro
+• En suelo, chequear cada 2-3 riegos
+
+EFECTO DE pH INCORRECTO:
+• Bloqueo de nutrientes
+• Carencias aunque nutrientes presentes
+• Acumulación de sales
+
+USO DE ÁCIDOS:
+• Fosfórico: aporta P, buen buffer
+• Nítrico: aporta N, efecto rápido
+• Cítrico: orgánico, menos estable`
       };
     }
-    
+
     // Respuesta por defecto con análisis contextual
     return {
-      short: `✅ Analizado: ${stageName} - ${sector} - EC: ${ecValue || 'N/A'}`, 
-      full: `He analizado tu consulta sobre "${userText}" en el contexto de:\n\n• Etapa: ${stageName}\n• Sector: ${sector}\n• EC total: ${ecValue || 'No medida'} mS/cm\n• PPM mezcla: ${ppmValue || 'No calculado'}\n\n${analysis}\n\n¿Necesitás ajustar algún parámetro específico o tenés alguna duda técnica sobre el cultivo?`
+      short: `✅ Analizado: ${stageName} - ${sector} - EC: ${ecValue || 'N/A'}`,
+      full: `He analizado tu consulta sobre "${userText}" en el contexto de:
+
+• Etapa: ${stageName}
+• Sector: ${sector}
+• EC total: ${ecValue || 'No medida'} mS/cm
+• PPM mezcla: ${ppmValue || 'No calculado'}
+
+${analysis}
+
+¿Necesitás ajustar algún parámetro específico o tenés alguna duda técnica sobre el cultivo?`
     };
   }
 
-  function analyzeCurrentFormulation(context) {
-    if (!context?.totals_ppm) return "Sin datos de formulación para analizar.";
-    
-    const ppm = context.totals_ppm;
-    let analysis = "ANÁLISIS ACTUAL:\n";
-    
-    // Análisis de Nitrógeno
-    const nTotal = ppm.N_total || 0;
-    if (nTotal < 100) analysis += "• NITRÓGENO: BAJO (considerá aumentar)\n";
-    else if (nTotal > 200) analysis += "• NITRÓGENO: ALTO (ok para vege, alto para flora)\n";
-    else analysis += "• NITRÓGENO: ÓPTIMO\n";
-    
-    // Análisis de Potasio  
-    const k2o = ppm.K2O || 0;
-    if (k2o < 150) analysis += "• POTASIO: BAJO (importante para flora)\n";
-    else if (k2o > 250) analysis += "• POTASIO: ALTO (puede bloquear Mg)\n";
-    else analysis += "• POTASIO: ÓPTIMO\n";
-    
-    // Balance NH4/NO3
-    const nh4 = ppm.N_NH4 || 0;
-    const no3 = ppm.N_NO3 || 0;
-    const totalN = nh4 + no3;
-    if (totalN > 0) {
-      const nh4Percent = (nh4 / totalN) * 100;
-      if (nh4Percent > 40) analysis += `• ALERTA: N-NH4 muy alto (${nh4Percent.toFixed(1)}%)\n`;
-    }
-    
-    return analysis;
-  }
-
-  function getFormulationAdvice(context) {
-    const stage = context?.stage?.name || '';
-    const stageLower = stage.toLowerCase();
-    
-    if (stageLower.includes('vegetativo') || stageLower.includes('vege')) {
-      return "Mantener N alto, incrementar gradualmente EC. Vigilar crecimiento vigoroso.";
-    }
-    if (stageLower.includes('floración') || stageLower.includes('flora')) {
-      return "Transición suave a mayor P/K, reducir N gradualmente. EC puede subir hasta 2.4.";
-    }
-    if (stageLower.includes('final') || stageLower.includes('fin')) {
-      return "Reducir nutrientes, iniciar flush. PPM debería bajar gradualmente.";
-    }
-    
-    return "Ajustar según respuesta de las plantas. Observar color y vigor del follaje.";
+  function withBotContext() {
+    if (botContext && Object.keys(botContext).length) return botContext;
+    return {
+      stage: { name: 'No definida' },
+      sector: 'General',
+      mix: { ec_total_mScm: null, tds_mix_ppm: null }
+    };
   }
 
   async function askDrCannabis(userText) {
-    const payloadContext = botContext && Object.keys(botContext).length
-      ? botContext
-      : { 
-          stage: { name: 'No definida' }, 
-          sector: 'General',
-          mix: { ec_total_mScm: null, tds_mix_ppm: null }
-        };
+    const payloadContext = withBotContext();
 
-    // Usar motor de conocimiento offline
-    const response = generateAgronomicResponse(userText, payloadContext);
-    return response;
+    try {
+      const controller = new AbortController();
+      const timer = setTimeout(() => controller.abort(), 45000);
+
+      const res = await fetch(apiEndpoints.query, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ message: userText, context: payloadContext }),
+        signal: controller.signal
+      });
+
+      clearTimeout(timer);
+
+      if (!res.ok) {
+        throw new Error('Backend respondió ' + res.status);
+      }
+
+      const data = await res.json();
+      if (data && data.short && data.full) {
+        setBotStatus({ ready: true, label: 'IA local conectada', model: 'Backend' });
+        return { short: String(data.short), full: String(data.full) };
+      }
+
+      throw new Error('Formato inesperado en la respuesta del backend');
+    } catch (err) {
+      console.warn('[DrCannabis] Fallback offline:', err?.message || err);
+      setBotStatus({ ready: false, label: 'Modo offline (fallback)', model: 'Conocimiento Agronómico' });
+      return generateAgronomicResponse(userText, payloadContext);
+    }
   }
 
   async function handleSubmit(e) {
@@ -653,9 +750,11 @@ function DrCannabisBot({ botContext }) {
 
   const quickPrompts = [
     "Ajustar PPM y EC para vegetativo en coco",
-    "Diagnóstico de hojas amarillas en floración T2", 
+    "Diagnóstico de hojas amarillas en floración T2",
     "Cómo hacer flush antes de la cosecha",
     "pH ideal para hidroponía",
+    "¿Cómo funciona la app Dr. Cannabis?",
+    "¿Cuántos watts por m² necesito para indoor?",
     "Balance de nutrientes para flora avanzada",
     "Problemas de exceso de nitrógeno"
   ];
@@ -683,7 +782,7 @@ function DrCannabisBot({ botContext }) {
       </button>
 
       {isOpen && (
-        <div className="fixed bottom-20 right-4 z-40 w-[92vw] max-w-md sm:max-w-lg rounded-2xl border border-emerald-500/40 bg-slate-950/95 backdrop-blur-xl shadow-2xl shadow-emerald-500/30 flex flex-col overflow-hidden max-h-[70vh] sm:max-h-[72vh] h-[65vh] sm:h-[60vh]">
+        <div className="fixed bottom-20 right-4 z-40 w-[92vw] max-w-md sm:max-w-lg rounded-2xl border border-emerald-500/40 bg-slate-950/95 backdrop-blur-xl shadow-2xl shadow-emerald-500/30 flex flex-col overflow-hidden max-h-[82vh] sm:max-h-[84vh] h-[75vh] sm:h-[72vh]">
           <div className="flex items-center justify-between px-4 py-3 border-b border-emerald-500/30 bg-gradient-to-r from-emerald-500/15 via-emerald-500/5 to-transparent">
             <div className="flex items-center gap-3">
               <div className="h-9 w-9 rounded-full bg-emerald-500 flex items-center justify-center text-slate-900 font-black text-xs">
@@ -797,7 +896,7 @@ function DrCannabisBot({ botContext }) {
               value={input}
               onChange={(e) => setInput(e.target.value)}
               placeholder="Escribí tu consulta para Dr. Cannabis..."
-              className="flex-1 resize-none rounded-xl border border-slate-700 bg-slate-900/80 px-3 py-2 text-xs text-slate-100 placeholder:text-slate-500 focus:outline-none focus:ring-2 focus:ring-emerald-400/60 focus:border-emerald-400/60 max-h-24"
+              className="flex-1 resize-none rounded-xl border border-slate-700 bg-slate-900/80 px-3 py-2 text-xs text-slate-100 placeholder:text-slate-500 focus:outline-none focus:ring-2 focus:ring-emerald-400/60 focus:border-emerald-400/60 max-h-32"
             />
             <button
               type="submit"
@@ -1276,6 +1375,10 @@ function App({ onBotContextChange }){
                     )}
                   </section>
 
+                  <div className="flex justify-center mt-3">
+                    <button className="px-4 py-2 rounded-2xl border border-emerald-500/50 bg-transparent hover:bg-emerald-800/30 text-emerald-200 font-semibold shadow-sm shadow-emerald-900/30" onClick={solveForTargets}>⚙️ Calcular Dosis de Fertilizante</button>
+                  </div>
+
                   {/* Objetivos y estado (editable con ±1) */}
                   <section className="rounded-2xl p-3 mt-6 text-sm bg-emerald-900/30 border border-emerald-700/40 text-emerald-200">
                     <h3 className="font-semibold text-emerald-300 text-center">Objetivos por estado Fenólico — <span className="italic">{stageName}</span></h3>
@@ -1287,7 +1390,6 @@ function App({ onBotContextChange }){
                           <th className="text-right pb-1 border-b border-emerald-700/40 text-emerald-200">PPMs Actuales</th>
                           <th className="text-right pb-1 border-b border-emerald-700/40 text-emerald-200">PPMs Objetivo</th>
                           <th className="text-right pb-1 border-b border-emerald-700/40 text-emerald-200">Δ</th>
-                          <th className="text-right pb-1 border-b border-emerald-700/40 text-emerald-200">Ajustar</th>
                         </tr>
                       </thead>
                       <tbody>
@@ -1306,15 +1408,14 @@ function App({ onBotContextChange }){
                               <tr key={name} className={cls}>
                                 <td className="py-1 border-b border-dashed border-emerald-700/40">{name}</td>
                                 <td className="py-1 border-b border-dashed border-emerald-700/40 text-right">{fmt2(cur)}</td>
-                                <td className="py-1 border-b border-dashed border-emerald-700/40 text-right">{fmt2(tgt)}</td>
-                                <td className={`py-1 border-b border-dashed border-emerald-700/40 text-right ${diff>0? 'text-emerald-300' : (diff<0? 'text-rose-300':'')}`}>{fmt2(diff)}</td>
                                 <td className="py-1 border-b border-dashed border-emerald-700/40 text-right">
-                                  <div className="inline-flex gap-1">
+                                  <div className="inline-flex items-center justify-end gap-1">
                                     <button className="px-2 py-0.5 border border-emerald-700/50 rounded" onClick={()=>setCustomTargets(s=>({...s,[key]: Math.max(0, (Number(getTarget(key))||0)-1)}))}>−</button>
-                                    <span className="min-w-[50px] inline-block text-center">{fmt2(getTarget(key)||0)}</span>
+                                    <span className="min-w-[60px] inline-block text-center">{fmt2(tgt)}</span>
                                     <button className="px-2 py-0.5 border border-emerald-700/50 rounded" onClick={()=>setCustomTargets(s=>({...s,[key]: (Number(getTarget(key))||0)+1}))}>+</button>
                                   </div>
                                 </td>
+                                <td className={`py-1 border-b border-dashed border-emerald-700/40 text-right ${diff>0? 'text-emerald-300' : (diff<0? 'text-rose-300':'')}`}>{fmt2(diff)}</td>
                               </tr>
                             )
                           }
@@ -1334,6 +1435,10 @@ function App({ onBotContextChange }){
                     {((sum.N_NO3+sum.N_NH4)>0 && ((sum.N_NH4/(sum.N_NO3+sum.N_NH4))>0.40)) && (
                       <div className="mt-2 text-yellow-300 text-sm font-semibold">⚠️ A partir del 40% del total de N-NH₄⁺ es contraproducente para el crecimiento.</div>
                     )}
+
+                    <div className="mt-4 flex justify-center">
+                      <button className="px-4 py-2 rounded-2xl border border-emerald-500/50 bg-transparent hover:bg-emerald-800/30 text-emerald-200 font-semibold shadow-sm shadow-emerald-900/30" onClick={solveForTargets}>⚙️ Calcular Dosis de Fertilizante</button>
+                    </div>
                   </section>
 
                   {/* Gráfico de composición */}
