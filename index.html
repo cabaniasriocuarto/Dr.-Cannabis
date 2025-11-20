@@ -332,6 +332,8 @@
 function DrCannabisBot({ botContext }) {
   const [isOpen, setIsOpen] = useState(false);
   const [input, setInput] = useState("");
+  const [apiEndpoints, setApiEndpoints] = useState(() => loadApiEndpoints());
+  const [showApiConfig, setShowApiConfig] = useState(false);
   const [messages, setMessages] = useState([
     {
       id: 1,
@@ -483,6 +485,37 @@ function DrCannabisBot({ botContext }) {
     }
   }
 
+  function persistApi(nextConfig) {
+    try {
+      if (typeof localStorage === 'undefined') return;
+      localStorage.setItem('dr_cannabis_api', JSON.stringify({
+        base: nextConfig.base,
+        query: nextConfig.query,
+        health: nextConfig.health,
+      }));
+    } catch (err) {
+      console.warn('No se pudo guardar la configuración del backend:', err);
+    }
+  }
+
+  function handleSaveApiConfig(e) {
+    e.preventDefault();
+    const form = new FormData(e.target);
+    const base = form.get('api_base');
+    const query = form.get('api_query');
+    const health = form.get('api_health');
+    const next = buildApiEndpoints({ base, query, health });
+    setApiEndpoints(next);
+    persistApi(next);
+    setShowApiConfig(false);
+  }
+
+  function resetApiConfig() {
+    const next = buildApiEndpoints();
+    setApiEndpoints(next);
+    persistApi(next);
+  }
+
   const quickPrompts = [
     "Ajustar PPM y EC para vegetativo en coco",
     "Diagnóstico de hojas amarillas en floración T2",
@@ -559,6 +592,11 @@ function DrCannabisBot({ botContext }) {
             className="flex-1 overflow-y-auto px-4 py-3 space-y-3 text-xs bg-gradient-to-b from-slate-950 via-slate-950 to-slate-900"
             style={{ scrollbarWidth: 'thin' }}
           >
+            <div className="text-[10px] text-emerald-300/80 border border-emerald-500/10 bg-slate-900/70 rounded-lg px-3 py-2">
+              <div className="font-semibold text-emerald-200">Backend activo</div>
+              <div className="truncate">Consulta: {apiEndpoints.query}</div>
+              <div className="truncate">Health: {apiEndpoints.health}</div>
+            </div>
             {messages.map((m) => (
               <div
                 key={m.id}
