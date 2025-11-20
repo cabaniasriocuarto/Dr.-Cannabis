@@ -526,7 +526,7 @@ function DrCannabisBot({ botContext }) {
       </button>
 
       {isOpen && (
-        <div className="fixed bottom-20 right-4 z-40 w-[94vw] max-w-md sm:max-w-lg rounded-2xl border border-emerald-500/40 bg-slate-950/95 backdrop-blur-xl shadow-2xl shadow-emerald-500/30 flex flex-col overflow-hidden max-h-[82vh] sm:max-h-[78vh] h-[70vh] sm:h-[68vh]">
+        <div className="fixed bottom-20 right-4 z-40 w-[92vw] max-w-md sm:max-w-lg rounded-2xl border border-emerald-500/40 bg-slate-950/95 backdrop-blur-xl shadow-2xl shadow-emerald-500/30 flex flex-col overflow-hidden max-h-[70vh] sm:max-h-[72vh] h-[65vh] sm:h-[60vh]">
           <div className="flex items-center justify-between px-4 py-3 border-b border-emerald-500/30 bg-gradient-to-r from-emerald-500/15 via-emerald-500/5 to-transparent">
             <div className="flex items-center gap-3">
               <div className="h-9 w-9 rounded-full bg-emerald-500 flex items-center justify-center text-slate-900 font-black text-xs">
@@ -575,6 +575,7 @@ function DrCannabisBot({ botContext }) {
           <div
             ref={chatRef}
             className="flex-1 overflow-y-auto px-4 py-3 space-y-3 text-xs bg-gradient-to-b from-slate-950 via-slate-950 to-slate-900"
+            style={{ scrollbarWidth: 'thin' }}
           >
             {messages.map((m) => (
               <div
@@ -1082,7 +1083,7 @@ function App({ onBotContextChange }){
                       <div className="text-xs mt-2 text-emerald-300/80">El ajuste de pH se calcula por <b>alcalinidad</b> (meq/L) → gramos de ácidos. Medí el pH final siempre.</div>
                     </div>
                     <div className="p-3 rounded-xl border border-emerald-800/50 bg-emerald-900/20 flex items-center justify-center">
-                      <img src="./assets/Logo.png" alt="cannabis" className="max-h-[280px] w-full object-contain"/>
+                      <img src="./assets/Logo3.png" alt="nuevo logo Dr. Cannabis" className="max-h-[280px] w-full object-contain"/>
                     </div>
                   </div>
 
