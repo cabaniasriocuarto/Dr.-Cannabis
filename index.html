@@ -426,14 +426,14 @@ function DrCannabisBot({ botContext }) {
   // Funciones para endpoints (simplificadas para modo offline definitivo)
   const loadApiEndpoints = () => {
     return {
-      base: 'http://localhost:17850',
-      query: 'http://localhost:17850/query',
-      health: 'http://localhost:17850/health'
+      base: 'http://localhost:17850/api/dr-cannabis',
+      query: 'http://localhost:17850/api/dr-cannabis/query',
+      health: 'http://localhost:17850/api/dr-cannabis/health'
     };
   };
 
   const buildApiEndpoints = (conf) => {
-    const base = conf?.base || 'http://localhost:17850';
+    const base = conf?.base || 'http://localhost:17850/api/dr-cannabis';
     return {
       base,
       query: conf?.query || base + '/query',
@@ -565,18 +565,47 @@ function DrCannabisBot({ botContext }) {
     return "Ajustar según respuesta de las plantas. Observar color y vigor del follaje.";
   }
 
-  async function askDrCannabis(userText) {
-    const payloadContext = botContext && Object.keys(botContext).length
-      ? botContext
-      : { 
-          stage: { name: 'No definida' }, 
-          sector: 'General',
-          mix: { ec_total_mScm: null, tds_mix_ppm: null }
-        };
+  function withBotContext() {
+    if (botContext && Object.keys(botContext).length) return botContext;
+    return {
+      stage: { name: 'No definida' },
+      sector: 'General',
+      mix: { ec_total_mScm: null, tds_mix_ppm: null }
+    };
+  }
 
-    // Usar motor de conocimiento offline
-    const response = generateAgronomicResponse(userText, payloadContext);
-    return response;
+  async function askDrCannabis(userText) {
+    const payloadContext = withBotContext();
+
+    try {
+      const controller = new AbortController();
+      const timer = setTimeout(() => controller.abort(), 45000);
+
+      const res = await fetch(apiEndpoints.query, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ message: userText, context: payloadContext }),
+        signal: controller.signal
+      });
+
+      clearTimeout(timer);
+
+      if (!res.ok) {
+        throw new Error('Backend respondió ' + res.status);
+      }
+
+      const data = await res.json();
+      if (data && data.short && data.full) {
+        setBotStatus({ ready: true, label: 'IA local conectada', model: 'Backend' });
+        return { short: String(data.short), full: String(data.full) };
+      }
+
+      throw new Error('Formato inesperado en la respuesta del backend');
+    } catch (err) {
+      console.warn('[DrCannabis] Fallback offline:', err?.message || err);
+      setBotStatus({ ready: false, label: 'Modo offline (fallback)', model: 'Conocimiento Agronómico' });
+      return generateAgronomicResponse(userText, payloadContext);
+    }
   }
 
   async function handleSubmit(e) {
