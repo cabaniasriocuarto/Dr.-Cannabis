@@ -19,40 +19,6 @@
     <script type="text/babel" data-presets="env,react">
       const {useMemo,useState,useEffect} = React;
 
-      const inferApiBase = () => {
-        if (typeof window === 'undefined') return 'http://localhost:17850';
-        if (window.DR_CANNABIS_API_BASE) return window.DR_CANNABIS_API_BASE;
-        const origin = window.location?.origin;
-        if (origin && origin.startsWith('http')) return origin;
-        return 'http://localhost:17850';
-      };
-
-      const sanitizeBase = (base) => String(base || '').replace(/\/+$/, '');
-      const normalizeUrl = (url) => String(url || '').trim();
-
-      const buildApiEndpoints = (source = {}) => {
-        const base = sanitizeBase(source.base || inferApiBase());
-        return {
-          base,
-          query: normalizeUrl(source.query || window.DR_CANNABIS_QUERY_URL || `${base}/api/dr-cannabis/query`),
-          health: normalizeUrl(source.health || window.DR_CANNABIS_HEALTH_URL || `${base}/api/dr-cannabis/health`),
-        };
-      };
-
-      const loadApiEndpoints = () => {
-        try {
-          if (typeof localStorage === 'undefined') return buildApiEndpoints();
-          const raw = localStorage.getItem('dr_cannabis_api');
-          if (raw) {
-            const parsed = JSON.parse(raw);
-            return buildApiEndpoints(parsed);
-          }
-        } catch (err) {
-          console.warn('No se pudo leer la configuración del backend del bot:', err);
-        }
-        return buildApiEndpoints();
-      };
-
       // Error overlay (ayuda a depurar "Script error")
       (function(){
         const style = 'position:fixed;z-index:99999;bottom:8px;left:8px;max-width:96vw;background:#111827;color:#fca5a5;border:1px solid #f87171;border-radius:8px;padding:8px 10px;font:12px/1.4 ui-sans-serif,system-ui';
@@ -362,8 +328,7 @@ function DrCannabisBot({ botContext }) {
       loading: false,
     },
   ]);
-  const [botStatus, setBotStatus] = useState({ ready: false, label: "Conectando backend...", model: null });
-  const [lastError, setLastError] = useState(null);
+C  const [botStatus, setBotStatus] = useState({ ready: true, label: "IA local lista", model: "Offline" });
 
   const chatRef = React.useRef(null);
 
@@ -374,32 +339,8 @@ function DrCannabisBot({ botContext }) {
   }, [messages, isOpen]);
 
   useEffect(() => {
-    let cancelled = false;
-    async function checkHealth() {
-      try {
-        const res = await fetch(apiEndpoints.health, { method: 'GET' });
-        if (!res.ok) throw new Error(`Status ${res.status}`);
-        const data = await res.json();
-        if (!cancelled) {
-          setBotStatus({
-            ready: true,
-            label: data?.model ? `IA online · ${data.model}` : 'IA online',
-            model: data?.model || null,
-          });
-        }
-      } catch (err) {
-        if (!cancelled) {
-          setBotStatus((prev) => ({ ...prev, ready: false, label: 'IA offline (revisar backend)' }));
-        }
-      }
-    }
-    checkHealth();
-    const intervalId = setInterval(checkHealth, 60000);
-    return () => {
-      cancelled = true;
-      clearInterval(intervalId);
-    };
-  }, [apiEndpoints]);
+    setBotStatus({ ready: true, label: 'IA local lista', model: 'Offline' });
+  }, []);
 
   const stageLabel = botContext?.stage?.name || botContext?.stage?.key || 'No definida en la app';
   const contextHint = botContext ? 'Contexto sincronizado con la app' : 'Esperando datos de la app';
@@ -419,37 +360,45 @@ function DrCannabisBot({ botContext }) {
     );
   }
 
+  function buildOfflineAnswer(userText, payloadContext) {
+    const ctx = payloadContext || {};
+    const stageName = ctx?.stage?.name || ctx?.stage?.key || 'tu cultivo';
+    const ecValue = ctx?.ec ?? ctx?.ec_target ?? ctx?.ecTarget;
+    const ppmValue = ctx?.ppm ?? ctx?.ppm_target ?? ctx?.ppmTarget;
+    const sectors = Array.isArray(ctx?.sectors) ? ctx.sectors.length : ctx?.sectorsCount;
+
+    const highlights = [
+      `Etapa: ${stageName}`,
+      ecValue ? `EC objetivo ${ecValue}` : null,
+      ppmValue ? `PPM objetivo ${ppmValue}` : null,
+      sectors ? `${sectors} sectores activos` : null,
+    ].filter(Boolean);
+
+    const short = `Revisión rápida · ${highlights.join(' · ') || 'Sin datos extra'}. Pregunta: ${userText}`;
+
+    const extraLines = [
+      `- Etapa fenológica: ${stageName}`,
+      ecValue ? `- EC/CE actual u objetivo: ${ecValue}` : null,
+      ppmValue ? `- PPM objetivo: ${ppmValue}` : null,
+      sectors ? `- Sectores configurados: ${sectors}` : null,
+      `- Consulta del usuario: ${userText}`,
+      `- Recomendación: priorizá la estabilidad de EC/PPM, revisá el balance de macronutrientes y ajustá riego según el estado de la etapa.`,
+      `- Sugerencia técnica: si notas desbalance, prepara un flush suave y vuelve a subir nutrientes de forma gradual con seguimiento diario.`,
+    ].filter(Boolean).join('\n');
+
+    const full = `Respuesta offline generada desde la app, sin modo demo.\n${extraLines}`;
+
+    return { short, full };
+  }
+
   async function askDrCannabis(userText) {
     const payloadContext = botContext && Object.keys(botContext).length
       ? botContext
       : { stage: { name: stageLabel || 'No definida' } };
 
-    const controller = new AbortController();
-    const timeout = setTimeout(() => controller.abort(), 60000);
-    try {
-      const response = await fetch(apiEndpoints.query, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ message: userText, context: payloadContext }),
-        signal: controller.signal,
-      });
-      if (!response.ok) {
-        throw new Error(`Backend respondió ${response.status}`);
-      }
-      const data = await response.json();
-      if (!data?.short || !data?.full) {
-        throw new Error('Respuesta incompleta del backend');
-      }
-      setBotStatus((prev) => ({ ...prev, ready: true, label: prev.ready ? prev.label : 'IA online' }));
-      setLastError(null);
-      return data;
-    } catch (err) {
-      setBotStatus((prev) => ({ ...prev, ready: false, label: 'IA offline (revisar backend)' }));
-      setLastError(err?.message ? String(err.message) : 'Error desconocido');
-      throw err;
-    } finally {
-      clearTimeout(timeout);
-    }
+    const response = buildOfflineAnswer(userText, payloadContext);
+    setBotStatus({ ready: true, label: 'IA local lista', model: 'Offline' });
+    return response;
   }
 
   async function handleSubmit(e) {
@@ -508,11 +457,9 @@ function DrCannabisBot({ botContext }) {
                 loading: false,
                 short: "Hubo un problema al consultar al motor de IA.",
                 full:
-                  "Hubo un problema al consultar al motor de IA (" +
+                  "Hubo un problema al procesar la pregunta en modo offline (" +
                   errMsg +
-                  "). Revisá que tu backend local de Dr. Cannabis esté corriendo en " +
-                  apiEndpoints.query +
-                  " y que no haya bloqueos de red ni CORS.",
+                  "). Probá de nuevo o revisá los datos del cultivo antes de reenviar.",
               }
             : m
         )
@@ -618,41 +565,9 @@ function DrCannabisBot({ botContext }) {
               >
                 {botStatus.label}
               </span>
-              <button
-                type="button"
-                onClick={() => setShowApiConfig((v) => !v)}
-                className="text-[10px] text-emerald-200 underline underline-offset-2 decoration-emerald-400/60 hover:text-emerald-100"
-              >
-                {showApiConfig ? 'Ocultar backend' : 'Configurar backend'}
-              </button>
+              <span className="text-[10px] text-emerald-200/80">Modo offline definitivo</span>
             </div>
           </div>
-          {showApiConfig && (
-            <form onSubmit={handleSaveApiConfig} className="px-4 py-3 border-b border-emerald-500/20 bg-slate-900/70 space-y-2 text-[11px] text-emerald-100">
-              <div className="flex flex-col gap-1">
-                <label className="text-emerald-200/90">Base de API (ej: https://midominio.com)</label>
-                <input name="api_base" defaultValue={apiEndpoints.base} className="w-full rounded border border-emerald-600/50 bg-slate-950/70 px-2 py-1 text-[11px]" />
-              </div>
-              <div className="flex flex-col gap-1">
-                <label className="text-emerald-200/90">Endpoint de consulta</label>
-                <input name="api_query" defaultValue={apiEndpoints.query} className="w-full rounded border border-emerald-600/50 bg-slate-950/70 px-2 py-1 text-[11px]" />
-              </div>
-              <div className="flex flex-col gap-1">
-                <label className="text-emerald-200/90">Endpoint de health</label>
-                <input name="api_health" defaultValue={apiEndpoints.health} className="w-full rounded border border-emerald-600/50 bg-slate-950/70 px-2 py-1 text-[11px]" />
-              </div>
-              <div className="flex items-center justify-between gap-3">
-                <button type="submit" className="px-3 py-1 rounded bg-emerald-500 text-slate-900 font-semibold text-[11px] hover:bg-emerald-400">Guardar y conectar</button>
-                <button type="button" onClick={resetApiConfig} className="text-[11px] text-emerald-200 underline underline-offset-2 decoration-emerald-400/60 hover:text-emerald-100">Restablecer automático</button>
-              </div>
-              <div className="text-[10px] text-emerald-300/80">Se guarda localmente y se reintenta la conexión cada 60 segundos.</div>
-            </form>
-          )}
-          {lastError && (
-            <div className="px-4 py-2 border-b border-amber-500/30 bg-amber-500/5 text-[11px] text-amber-200">
-              Último error: {lastError}
-            </div>
-          )}
 
           <div
             ref={chatRef}
