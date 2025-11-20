@@ -33,8 +33,7 @@
       const ReactDOMGlobal = window.ReactDOM;
       if(!ReactGlobal || !ReactDOMGlobal){
         renderCriticalError('Faltan dependencias base (React/ReactDOM). Bajá una copia local de los scripts CDN para que la app funcione sin conexión.');
-        return;
-      }
+      } else {
       const {useMemo,useState,useEffect} = ReactGlobal;
 
       // Error overlay (ayuda a depurar "Script error")
@@ -1469,6 +1468,7 @@ function App({ onBotContextChange }){
       const _tests = runTests();
       renderTests(_tests);
       window.FertiCalcTests = _tests;
+      }
     </script>
   </body>
 </html>
