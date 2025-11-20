@@ -78,6 +78,17 @@
           markDepStatus(`Listo ${dep.name} (${origin === 'asset' ? 'local' : 'CDN'})…`);
         }
         markDepStatus('Dependencias listas (offline preferido).');
+        try {
+          if(window.Babel?.transformScriptTags){
+            window.Babel.transformScriptTags();
+          } else {
+            throw new Error('Babel no pudo inicializarse');
+          }
+        } catch (err) {
+          markDepStatus('Error inicializando Babel: ' + err.message, true);
+          renderCriticalError('No se pudo iniciar Babel (JSX). Revisa que babel.min.js esté accesible.');
+          return;
+        }
         setTimeout(()=> depStatusBox.remove?.(), 3000);
       })();
     </script>
