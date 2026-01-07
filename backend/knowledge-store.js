@@ -250,9 +250,19 @@ function buildQueryVector(query, idf) {
   return vector;
 }
 
+function buildChunksForSource({ sourceId, sourceLabel, text, maxChunkChars }) {
+  const chunks = chunkPrompt(text || "", maxChunkChars);
+  return chunks.map((chunk) => ({
+    title: chunk.title,
+    content: chunk.content,
+    source: sourceId,
+    sourceLabel
+  }));
+}
+
 export function createKnowledgeStore({
   dbPath,
-  promptText,
+  sources = [],
   maxChunkChars = 900
 }) {
   const resolvedPath = dbPath || path.join(process.cwd(), "dr-cannabis.db");
@@ -273,13 +283,21 @@ export function createKnowledgeStore({
     );
   `);
 
-  const promptHash = sha256(promptText || "");
+  const sourceSignature = sha256(
+    JSON.stringify(
+      sources.map((source) => ({
+        id: source.id,
+        label: source.label,
+        hash: sha256(source.text || "")
+      }))
+    )
+  );
+
   const storedHash = db
     .prepare("SELECT value FROM meta WHERE key = ?")
-    .get("prompt_hash");
+    .get("knowledge_signature");
 
-  if (!storedHash || storedHash.value !== promptHash) {
-    const chunks = chunkPrompt(promptText || "", maxChunkChars);
+  if (!storedHash || storedHash.value !== sourceSignature) {
     const insert = db.prepare(
       "INSERT INTO knowledge (title, content, source, token_count) VALUES (?, ?, ?, ?)"
     );
@@ -290,15 +308,23 @@ export function createKnowledgeStore({
 
     const transaction = db.transaction(() => {
       remove.run();
-      chunks.forEach((chunk) => {
-        insert.run(
-          chunk.title,
-          chunk.content,
-          "prompt",
-          tokenize(chunk.content).length
-        );
+      sources.forEach((source) => {
+        const entries = buildChunksForSource({
+          sourceId: source.id,
+          sourceLabel: source.label,
+          text: source.text,
+          maxChunkChars
+        });
+        entries.forEach((entry) => {
+          insert.run(
+            entry.title,
+            entry.content,
+            entry.source,
+            tokenize(entry.content).length
+          );
+        });
       });
-      setMeta.run("prompt_hash", promptHash);
+      setMeta.run("knowledge_signature", sourceSignature);
       setMeta.run("knowledge_updated", new Date().toISOString());
     });
 
@@ -314,6 +340,7 @@ export function createKnowledgeStore({
   return {
     dbPath: resolvedPath,
     entryCount: rows.length,
+    sourceCount: sources.length,
     search(query, { limit = 4, minScore = 0.08, maxChars = 1800 } = {}) {
       if (!query || !rows.length) return "";
       const queryVector = buildQueryVector(query, idf);

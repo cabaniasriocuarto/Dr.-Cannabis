@@ -29,6 +29,7 @@ const LLM_TIMEOUT_MS = Number(process.env.DR_CANNABIS_LLM_TIMEOUT || 60000);
 // Ruta al Prompt Maestro en un archivo .md
 // (Copiá todo tu prompt de Dr. Cannabis en este archivo)
 const PROMPT_PATH = path.join(__dirname, "dr-cannabis-prompt.md");
+const KNOWLEDGE_PATH = path.join(__dirname, "ferticalc-knowledge.md");
 const DB_PATH = process.env.DR_CANNABIS_DB_PATH || path.join(__dirname, "dr-cannabis.db");
 
 let promptMaestro = "";
@@ -39,9 +40,20 @@ try {
   console.error("[DrCannabis] No se pudo leer dr-cannabis-prompt.md. Asegúrate de crearlo.");
 }
 
+let fertiKnowledge = "";
+try {
+  fertiKnowledge = fs.readFileSync(KNOWLEDGE_PATH, "utf8");
+  console.log("[DrCannabis] Base de conocimiento cargada desde:", KNOWLEDGE_PATH);
+} catch (err) {
+  console.error("[DrCannabis] No se pudo leer ferticalc-knowledge.md. Asegúrate de crearlo.");
+}
+
 const knowledgeStore = createKnowledgeStore({
   dbPath: DB_PATH,
-  promptText: promptMaestro,
+  sources: [
+    { id: "prompt", label: "Prompt Maestro", text: promptMaestro },
+    { id: "ferticalc", label: "Ferticalc Base", text: fertiKnowledge }
+  ],
   maxChunkChars: 900
 });
 
@@ -247,6 +259,7 @@ const server = http.createServer(async (req, res) => {
     return sendJson(res, 200, {
       ...buildHealthPayload(),
       knowledgeEntries: knowledgeStore.entryCount,
+      knowledgeSources: knowledgeStore.sourceCount,
       dbPath: knowledgeStore.dbPath
     });
   }
