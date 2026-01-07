@@ -201,6 +201,28 @@
         'Última Semana':  { N:30,  H2PO4:30, SO4:10, MoO4:0,     B:0,     Ca:10, K2O:80,  Mg:10,  Fe:0,     Zn:0,     Mn:0,      Cu:0,      Ni:1.05,Co:0,   Si:0 },
       };
 
+      const scaleStage = (stage, pct) => Object.fromEntries(
+        Object.entries(stage).map(([key, value]) => [key, number(value) * pct])
+      );
+
+      const AUTO_STAGE_SPECS = [
+        { key: 'Arranque / plantín', base: '1er Semana', pct: 0.325 },
+        { key: '1er Semana de Vege', base: 'Vegetativo', pct: 0.4 },
+        { key: '2da Semana de Vege', base: 'Vegetativo', pct: 0.55 },
+        { key: 'Vegetación Plena', base: 'Vegetativo', pct: 0.6 },
+        { key: 'Prefloración', base: 'Preflora', pct: 0.7 },
+        { key: 'Pico de floración', base: 'Flora', pct: 0.7 },
+        { key: 'Final / maduración', base: 'Fin de Flora', pct: 0.5 },
+      ];
+
+      const AUTO_STAGE_LABELS = Object.fromEntries(
+        AUTO_STAGE_SPECS.map(({ key }) => [key, key])
+      );
+
+      const STAGES_AUTO = Object.fromEntries(
+        AUTO_STAGE_SPECS.map(({ key, base, pct }) => [key, scaleStage(STAGES[base], pct)])
+      );
+
       const SPECIES = ['N','H2PO4','SO4','MoO4','B','Ca','K2O','Mg','Fe','Zn','Mn','Cu','Ni','Co','Si'];
 
       /*************** Conversión producto → ppm por g/L ***************/
@@ -914,6 +936,7 @@ ${analysis}
 
 function App({ onBotContextChange }){
         const [rows, setRows] = useState(initialProducts)
+        const [plantType, setPlantType] = useState('fotoperiodica')
         const [stageKey, setStageKey] = useState('Valores ppm Clonación')
         const [tolPct, setTolPct] = useState(12)
         const [volMode, setVolMode] = useState('1000')
@@ -1003,8 +1026,23 @@ function App({ onBotContextChange }){
         const chartParts = { N: derived.N_total, H2PO4: sum.H2PO4, K2O: sum.K2O, Ca: sum.Ca, Mg: sum.Mg, SO4: sum.SO4, Fe: sum.Fe, Zn: sum.Zn, Mn: sum.Mn, Cu: sum.Cu, MoO4: sum.MoO4, B: sum.B, Si: sum.Si, Ni: sum.Ni, Co: sum.Co }
         const chartData = useMemo(()=>{ const total = Object.values(chartParts).reduce((a,b)=>a+b,0) || 1; return Object.entries(chartParts).map(([name,value])=>({ name, value: (value/total)*100 })) }, [sum, derived])
 
-        const stageName = STAGE_LABELS[stageKey]
-        const stageDefaults = STAGES[stageName]
+        const stageOptions = useMemo(
+          ()=> (plantType === 'automatica' ? AUTO_STAGE_LABELS : STAGE_LABELS),
+          [plantType]
+        )
+        const stageMap = useMemo(
+          ()=> (plantType === 'automatica' ? STAGES_AUTO : STAGES),
+          [plantType]
+        )
+        const stageName = stageOptions[stageKey]
+        const stageDefaults = stageMap[stageName] || {}
+
+        useEffect(()=>{
+          if (!stageOptions[stageKey]){
+            const first = Object.keys(stageOptions)[0]
+            if (first) setStageKey(first)
+          }
+        }, [stageOptions, stageKey])
 
         // ====== Objetivos personalizados ======
         const [customTargets, setCustomTargets] = useState({})
@@ -1215,9 +1253,15 @@ function App({ onBotContextChange }){
                 <>
                   {/* Controles principales */}
                   <div className="flex flex-wrap items-center justify-center gap-4">
+                    <label className="text-sm text-emerald-200 flex items-center gap-2">Tipo de Planta:
+                      <select className="border bg-emerald-950/60 border-emerald-700/50 rounded px-2 py-1 text-emerald-100" value={plantType} onChange={e=>setPlantType(e.target.value)}>
+                        <option value="fotoperiodica">Fotoperiódica</option>
+                        <option value="automatica">Automática</option>
+                      </select>
+                    </label>
                     <label className="text-sm text-emerald-200 flex items-center gap-2">Estado fenológico de tus plantas:
                       <select className="border bg-emerald-950/60 border-emerald-700/50 rounded px-2 py-1 text-emerald-100" value={stageKey} onChange={e=>setStageKey(e.target.value)}>
-                        {Object.keys(STAGE_LABELS).map(s=> <option key={s} value={s}>{s}</option>)}
+                        {Object.keys(stageOptions).map(s=> <option key={s} value={s}>{s}</option>)}
                       </select>
                     </label>
                     <div className="flex items-center gap-2 text-sm text-emerald-200">
