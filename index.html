@@ -421,6 +421,8 @@
 function DrCannabisBot({ botContext }) {
   const [isOpen, setIsOpen] = useState(false);
   const [input, setInput] = useState("");
+  const [knowledgeText, setKnowledgeText] = useState("");
+  const [knowledgeStatus, setKnowledgeStatus] = useState("loading");
   const [messages, setMessages] = useState([
     {
       id: 1,
@@ -444,6 +446,25 @@ function DrCannabisBot({ botContext }) {
       chatRef.current.scrollTop = chatRef.current.scrollHeight;
     }
   }, [messages, isOpen]);
+
+  useEffect(() => {
+    let active = true;
+    fetch("backend/ferticalc-knowledge.md")
+      .then((res) => (res.ok ? res.text() : Promise.reject(new Error("No se pudo leer la base de conocimiento"))))
+      .then((text) => {
+        if (!active) return;
+        setKnowledgeText(text);
+        setKnowledgeStatus("ready");
+      })
+      .catch((err) => {
+        console.warn("[DrCannabis] No se pudo cargar base de conocimiento:", err?.message || err);
+        if (!active) return;
+        setKnowledgeStatus("error");
+      });
+    return () => {
+      active = false;
+    };
+  }, []);
 
   // Funciones para endpoints (simplificadas para modo offline definitivo)
   const loadApiEndpoints = () => {
@@ -479,11 +500,65 @@ function DrCannabisBot({ botContext }) {
   }
 
   // Motor de conocimiento agronómico offline
+  function normalizeToken(token) {
+    return token
+      .toLowerCase()
+      .normalize("NFD")
+      .replace(/[\u0300-\u036f]/g, "")
+      .replace(/[^a-z0-9]+/g, "");
+  }
+
+  const stopwords = new Set([
+    "a","al","algo","algunas","algunos","ante","antes","como","con","contra","cual","cuando","de","del","desde",
+    "donde","dos","el","ella","ellas","ellos","en","era","erais","eran","eras","eres","es","esa","esas","ese","eso",
+    "esos","esta","estaba","estaban","estado","estais","estamos","estan","estar","estas","este","esto","estos","estoy",
+    "fin","fue","fueron","fui","fuimos","ha","hace","haces","haciendo","han","hasta","hay","la","las","le","les","lo",
+    "los","me","mi","mis","mucho","muy","no","nos","nosotros","o","os","otra","otro","para","pero","poco","por",
+    "porque","que","se","sea","ser","si","sin","sobre","son","su","sus","tambien","tan","te","tengo","ti","tiene",
+    "tienen","todo","tu","tus","un","una","uno","unos","vos","y","ya"
+  ]);
+
+  function tokenizeText(text) {
+    if (!text) return [];
+    return text
+      .split(/\s+/g)
+      .map(normalizeToken)
+      .filter((token) => token && !stopwords.has(token));
+  }
+
+  function findKnowledgeSnippets(query, maxChars = 1100) {
+    if (!knowledgeText) return "";
+    const tokens = tokenizeText(query);
+    if (!tokens.length) return "";
+    const sections = knowledgeText.split(/-{10,}\n/);
+    const scored = sections
+      .map((section) => {
+        const lower = section.toLowerCase();
+        let score = 0;
+        tokens.forEach((token) => {
+          if (token && lower.includes(token)) score += 1;
+        });
+        return { section: section.trim(), score };
+      })
+      .filter((item) => item.section && item.score > 0)
+      .sort((a, b) => b.score - a.score)
+      .slice(0, 2);
+
+    let snippet = "";
+    for (const item of scored) {
+      const next = item.section.length > 900 ? item.section.slice(0, 900) + "…" : item.section;
+      if ((snippet + "\n\n" + next).trim().length > maxChars) break;
+      snippet = snippet ? `${snippet}\n\n${next}` : next;
+    }
+    return snippet.trim();
+  }
+
   function generateAgronomicResponse(userText, context) {
     const stageName = context?.stage?.name || context?.stage?.key || 'tu cultivo';
     const ecValue = context?.mix?.ec_total_mScm;
     const ppmValue = context?.mix?.tds_mix_ppm;
     const sector = context?.sector || 'General';
+    const knowledgeSnippet = findKnowledgeSnippets(userText);
 
     // Análisis de la formulación actual
     const analysis = analyzeCurrentFormulation(context);
@@ -544,7 +619,9 @@ Si usás sodio/HPS: 600 W cubre ~1-1.2 m²; LED modernos rinden más por watt.`
 
 ${analysis}
 
-Recomendación: ${getFormulationAdvice(context)}`
+Recomendación: ${getFormulationAdvice(context)}
+
+${knowledgeSnippet ? `\n\n📚 Base Ferticalc relevante:\n${knowledgeSnippet}` : ""}`
       };
     }
 
@@ -651,6 +728,7 @@ USO DE ÁCIDOS:
 
 ${analysis}
 
+${knowledgeSnippet ? `\n📚 Base Ferticalc relevante:\n${knowledgeSnippet}\n` : ""}
 ¿Necesitás ajustar algún parámetro específico o tenés alguna duda técnica sobre el cultivo?`
     };
   }
@@ -693,7 +771,12 @@ ${analysis}
       throw new Error('Formato inesperado en la respuesta del backend');
     } catch (err) {
       console.warn('[DrCannabis] Fallback offline:', err?.message || err);
-      setBotStatus({ ready: false, label: 'Modo offline (fallback)', model: 'Conocimiento Agronómico' });
+      const hasKnowledge = knowledgeStatus === "ready";
+      setBotStatus({
+        ready: false,
+        label: hasKnowledge ? "Modo offline (base cargada)" : "Modo offline (fallback)",
+        model: hasKnowledge ? "Ferticalc Base" : "Conocimiento Agronómico"
+      });
       return generateAgronomicResponse(userText, payloadContext);
     }
   }
