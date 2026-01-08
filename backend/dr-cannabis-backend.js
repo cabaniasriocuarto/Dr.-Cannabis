@@ -9,6 +9,7 @@ import http from "http";
 import fs from "fs";
 import path from "path";
 import { fileURLToPath, URL as NodeURL } from "url";
+import { createKnowledgeStore } from "./knowledge-store.js";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -28,6 +29,8 @@ const LLM_TIMEOUT_MS = Number(process.env.DR_CANNABIS_LLM_TIMEOUT || 60000);
 // Ruta al Prompt Maestro en un archivo .md
 // (Copiá todo tu prompt de Dr. Cannabis en este archivo)
 const PROMPT_PATH = path.join(__dirname, "dr-cannabis-prompt.md");
+const KNOWLEDGE_PATH = path.join(__dirname, "ferticalc-knowledge.md");
+const DB_PATH = process.env.DR_CANNABIS_DB_PATH || path.join(__dirname, "dr-cannabis.db");
 
 let promptMaestro = "";
 try {
@@ -36,6 +39,23 @@ try {
 } catch (err) {
   console.error("[DrCannabis] No se pudo leer dr-cannabis-prompt.md. Asegúrate de crearlo.");
 }
+
+let fertiKnowledge = "";
+try {
+  fertiKnowledge = fs.readFileSync(KNOWLEDGE_PATH, "utf8");
+  console.log("[DrCannabis] Base de conocimiento cargada desde:", KNOWLEDGE_PATH);
+} catch (err) {
+  console.error("[DrCannabis] No se pudo leer ferticalc-knowledge.md. Asegúrate de crearlo.");
+}
+
+const knowledgeStore = createKnowledgeStore({
+  dbPath: DB_PATH,
+  sources: [
+    { id: "prompt", label: "Prompt Maestro", text: promptMaestro },
+    { id: "ferticalc", label: "Ferticalc Base", text: fertiKnowledge }
+  ],
+  maxChunkChars: 900
+});
 
 function applyCors(res) {
   res.setHeader("Access-Control-Allow-Origin", "*");
@@ -47,7 +67,7 @@ function applyCors(res) {
 // Función auxiliar: armar prompt para el LLM
 // ------------------------
 
-function buildSystemPrompt() {
+function buildSystemPrompt(knowledgeContext) {
   return `Eres \"Dr. Cannabis\", asistente agronómico y manual interactivo de la app \"Dr. Cannabis -Fertilizer-IA-\".
 
 A continuación tienes tu Prompt Maestro completo. Respeta estrictamente su rol, estilo, tono, formación en nutrición de cannabis, riego, plagas, enfermedades, indoor, exterior, invernaderos, clonación, postcosecha y manejo integrado. También recuerda que eres un manual interactivo de la aplicación (explicas paso a paso cómo usar la app cuando te preguntan sobre la interfaz).
@@ -55,6 +75,8 @@ A continuación tienes tu Prompt Maestro completo. Respeta estrictamente su rol,
 ------------- PROMPT MAESTRO -------------
 ${promptMaestro}
 ------------- FIN PROMPT MAESTRO -------------
+
+${knowledgeContext ? `\n------------- CONTEXTO BASE DE DATOS (RELEVANTE) -------------\n${knowledgeContext}\n------------- FIN CONTEXTO BD -------------\n` : ""}
 
 Reglas adicionales IMPORTANTES:
 - Siempre responde en español por defecto.
@@ -234,7 +256,12 @@ const server = http.createServer(async (req, res) => {
   const requestUrl = new NodeURL(req.url || "/", `http://${req.headers.host || "localhost"}`);
 
   if (req.method === "GET" && requestUrl.pathname === "/api/dr-cannabis/health") {
-    return sendJson(res, 200, buildHealthPayload());
+    return sendJson(res, 200, {
+      ...buildHealthPayload(),
+      knowledgeEntries: knowledgeStore.entryCount,
+      knowledgeSources: knowledgeStore.sourceCount,
+      dbPath: knowledgeStore.dbPath
+    });
   }
 
   if (req.method === "POST" && requestUrl.pathname === "/api/dr-cannabis/query") {
@@ -245,7 +272,12 @@ const server = http.createServer(async (req, res) => {
         return sendJson(res, 400, { error: "Falta 'message' en el cuerpo del request" });
       }
 
-      const systemPrompt = buildSystemPrompt();
+      const knowledgeContext = knowledgeStore.search(message, {
+        limit: 4,
+        minScore: 0.08,
+        maxChars: 1800
+      });
+      const systemPrompt = buildSystemPrompt(knowledgeContext);
       const userPromptObj = buildUserPrompt(message, context);
 
       const rawText = await callLocalLLM(systemPrompt, userPromptObj);
